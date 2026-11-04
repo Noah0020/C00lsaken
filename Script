@@ -62,7 +62,7 @@ local CONFIG = {
     HitboxWidth          = 6,
     HitboxLength         = 9,
     HitboxHeight         = 6,
-    HitboxMultiplier     = 1,
+    HitboxMultiplier     = 1, -- internal only
 }
 
 local function log(msg) if CONFIG.DEBUG then warn("[c00lsaken] " .. msg) end end
@@ -354,7 +354,6 @@ local function updateSurvivorESP()
     end
 end
 
--- Item ESP
 local medkitActive, bloxyActive = false, false
 local itemHighlights = { Medkit = {}, BloxyCola = {} }
 
@@ -389,7 +388,6 @@ local function clearItemESP(name)
     clearHighlights(itemHighlights[name])
 end
 
--- Generator ESP
 local genESPActive = false
 local genConns = {}
 
@@ -463,11 +461,11 @@ Workspace.DescendantAdded:Connect(function(d)
 end)
 
 -- ============================================================
--- HDT (Hitbox Dragging Tech) — turns player to killer during drag
+-- HDT — Animation-only trigger, no range requirement
 -- ============================================================
 local hitboxDraggingTech = false
 local _hdtDebounce = false
-local HDT_SPEED, HDT_DELAY, HDT_RADIUS = 5.6, 0, 6
+local HDT_SPEED, HDT_DELAY = 5.6, 0
 
 local blockAnimIds = {
     "72722244508749", "96959123077498", "95802026624883",
@@ -533,6 +531,7 @@ local function beginDrag(killerModel)
     bv.Velocity = Vector3.new(0, 0, 0)
     bv.Parent = hrp
 
+    -- Turn player to killer during drag
     local bg = Instance.new("BodyGyro")
     bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
     bg.D = 50
@@ -577,6 +576,7 @@ local function beginDrag(killerModel)
     task.delay(0.4, function() if _hdtDebounce then _hdtDebounce = false end end)
 end
 
+-- HDT trigger: block animation only (no range check)
 RunService.RenderStepped:Connect(function()
     if not hitboxDraggingTech then return end
     if not cachedAnimator then refreshAnimator() end
@@ -599,40 +599,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-task.spawn(function()
-    while true do
-        RunService.Heartbeat:Wait()
-        if not hitboxDraggingTech then task.wait(0.15); continue end
-        local char = LocalPlayer.Character
-        local myRoot = char and char:FindFirstChild("HumanoidRootPart")
-        if not myRoot then task.wait(0.15); continue end
-        local found = nil
-        local Hitboxes = Workspace:FindFirstChild("Hitboxes")
-        if Hitboxes then
-            for _, p in ipairs(Hitboxes:GetDescendants()) do
-                if p:IsA("BasePart") and (p.Position - myRoot.Position).Magnitude <= HDT_RADIUS then
-                    found = p; break
-                end
-            end
-        end
-        if not found then
-            for _, p in ipairs(Workspace:GetDescendants()) do
-                if p:IsA("BasePart") and p.Name == "AntiFlickZone" and (p.Position - myRoot.Position).Magnitude <= HDT_RADIUS then
-                    found = p; break
-                end
-            end
-        end
-        if found and not _hdtDebounce then
-            local nearest = getNearestKillerModel()
-            if nearest then
-                task.wait(HDT_DELAY)
-                task.spawn(function() beginDrag(nearest) end)
-            end
-        end
-        task.wait(0.12)
-    end
-end)
-
 -- ============================================================
 -- STAMINA
 -- ============================================================
@@ -640,11 +606,11 @@ local ok, sprintModule = pcall(function()
     return require(ReplicatedStorage.Systems.Character.Game.Sprinting)
 end)
 
-local maxStaminaValue  = ok and sprintModule.MaxStamina or 100
-local sprintSpeedValue = ok and sprintModule.SprintSpeed or 24
-local staminaGainValue = ok and sprintModule.StaminaGain or 10
+local maxStaminaValue   = ok and sprintModule.MaxStamina or 100
+local sprintSpeedValue  = ok and sprintModule.SprintSpeed or 24
+local staminaGainValue  = ok and sprintModule.StaminaGain or 10
 local staminaDrainValue = ok and sprintModule.StaminaDrain or 1
-local regenDelayValue  = ok and sprintModule.StaminaRegenDelay or 0.5
+local regenDelayValue   = ok and sprintModule.StaminaRegenDelay or 0.5
 
 local infStaminaActive, staminaThread = false, nil
 
@@ -857,38 +823,33 @@ local BoxL = Tabs.Box:AddLeftGroupbox("Size", "maximize")
 local BoxR = Tabs.Box:AddRightGroupbox("Timing & Visuals", "clock")
 
 BoxL:AddSlider("Box_Width", {
-    Text = "Box Width (Bigger)",
-    Min = 1, Max = 30, Rounding = 1, Default = CONFIG.HitboxWidth,
+    Text = "Width",
+    Min = 1, Max = 40, Rounding = 1, Default = CONFIG.HitboxWidth,
     Callback = function(v) CONFIG.HitboxWidth = v end,
 })
-BoxL:AddSlider("Box_Length", {
-    Text = "Box Length (Go Up)",
-    Min = 1, Max = 40, Rounding = 1, Default = CONFIG.HitboxLength,
-    Callback = function(v) CONFIG.HitboxLength = v end,
-})
 BoxL:AddSlider("Box_Height", {
-    Text = "Box Height",
+    Text = "Height",
     Min = 1, Max = 30, Rounding = 1, Default = CONFIG.HitboxHeight,
     Callback = function(v) CONFIG.HitboxHeight = v end,
 })
-BoxL:AddSlider("Box_Multi", {
-    Text = "Box Multiplier",
-    Min = 0.1, Max = 5, Rounding = 1, Default = 1,
-    Callback = function(v) CONFIG.HitboxMultiplier = v end,
+BoxL:AddSlider("Box_Length", {
+    Text = "Length",
+    Min = 1, Max = 40, Rounding = 1, Default = CONFIG.HitboxLength,
+    Callback = function(v) CONFIG.HitboxLength = v end,
 })
 BoxL:AddSlider("Box_Distance", {
-    Text = "Box Distance",
+    Text = "Distance",
     Min = 1, Max = 20, Rounding = 1, Default = 3,
     Callback = function(v) CONFIG.HitboxDistance = v end,
 })
 
 BoxR:AddSlider("Box_Duration", {
-    Text = "Box Duration",
+    Text = "Duration",
     Min = 0.1, Max = 3, Rounding = 2, Suffix = "s", Default = 0.7,
     Callback = function(v) CONFIG.HitboxDuration = v end,
 })
 BoxR:AddSlider("Box_Life", {
-    Text = "Box Life",
+    Text = "Life",
     Min = 0.1, Max = 3, Rounding = 2, Suffix = "s", Default = 0.5,
     Callback = function(v) CONFIG.HitboxLifetime = v end,
 })
@@ -914,7 +875,7 @@ BoxR:AddSlider("Outline_Trans", {
 })
 
 -- ============================================================
--- HDT TAB
+-- HDT TAB (no range slider)
 -- ============================================================
 local HDTBox = Tabs.HDT:AddLeftGroupbox("Hitbox Dragging Tech", "cpu")
 
@@ -932,11 +893,6 @@ HDTBox:AddSlider("HDT_Delay", {
     Text = "HDT Delay",
     Min = 0, Max = 2, Rounding = 2, Suffix = "s", Default = 0,
     Callback = function(v) HDT_DELAY = v end,
-})
-HDTBox:AddSlider("HDT_Radius", {
-    Text = "HDT Detect Radius",
-    Min = 1, Max = 20, Rounding = 1, Default = 6,
-    Callback = function(v) HDT_RADIUS = v end,
 })
 
 -- ============================================================
