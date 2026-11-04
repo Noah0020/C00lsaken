@@ -106,7 +106,7 @@ local CONFIG = {
     HitboxTransparency   = 0.8,
     HitboxColor          = Color3.fromRGB(255, 255, 255),
     HitboxHitColor       = Color3.fromRGB(0, 255, 0),
-    HitboxDistance       = 3,   -- exposed as "Offset"
+    HitboxDistance       = 3,
     ShowOutline          = true,
     ShowHitboxVisual     = true,
     OutlineThickness     = 0.05,
@@ -778,7 +778,7 @@ local function beginDrag(killerModel)
 end
 
 -- ============================================================
--- HDT TRIGGER (deduped + AbilitiesDisabled protection)
+-- HDT TRIGGER (deduped + AbilitiesDisabled protection + cooldown-safe)
 -- ============================================================
 local HDT_BLOCK_COOLDOWN = 27
 local HDT_ACCEPT_WINDOW  = 0.2
@@ -806,8 +806,10 @@ triggerHDTFromBlock = function()
     local nearest = getNearestKillerModel()
     if not nearest then return end
 
+    -- Reserve the accept window immediately (dedup hook + manual fallback).
+    -- Do NOT consume the 27s cooldown yet — it's consumed only after
+    -- the delayed callback passes all its checks and actually activates.
     lastHDTTriggerAccept = now
-    lastHDTBlockTime     = now
 
     task.delay(HDT_DELAY, function()
         -- Check again after the delay
@@ -816,10 +818,20 @@ triggerHDTFromBlock = function()
         if not hitboxDraggingTech then return end
         if _hdtDebounce then return end
 
-        local currentTarget = getNearestKillerModel()
-        if currentTarget then
-            beginDrag(currentTarget)
+        local now2 = os.clock()
+
+        -- Re-check cooldown inside callback so late duplicates can't slip past
+        if now2 - lastHDTBlockTime < HDT_BLOCK_COOLDOWN then
+            return
         end
+
+        local currentTarget = getNearestKillerModel()
+        if not currentTarget then return end
+
+        -- Consume the 27s cooldown only now, when we truly activate HDT
+        lastHDTBlockTime = now2
+
+        beginDrag(currentTarget)
     end)
 end
 
@@ -1124,7 +1136,7 @@ ABRight:AddSlider("Punch_Smooth", {
 })
 
 -- ============================================================
--- BOX SETTINGS TAB  (Distance renamed to Offset)
+-- BOX SETTINGS TAB
 -- ============================================================
 local BoxL = Tabs.Box:AddLeftGroupbox("Size", "maximize")
 local BoxR = Tabs.Box:AddRightGroupbox("Timing & Visuals", "clock")
