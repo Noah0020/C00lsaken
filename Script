@@ -34,11 +34,34 @@ local LocalPlayer       = Players.LocalPlayer
 local PlayerGui         = LocalPlayer:WaitForChild("PlayerGui")
 local MainUI            = PlayerGui:WaitForChild("MainUI", 10)
 
-local PlayersFolder  = Workspace:WaitForChild("Players", 10)
-if not PlayersFolder then return end
-local killersFolder   = PlayersFolder:WaitForChild("Killers", 10)
-local survivorsFolder = PlayersFolder:WaitForChild("Survivors", 10)
-if not killersFolder or not survivorsFolder then return end
+-- ============================================================
+-- FOLDER LOADING (non-blocking — UI always loads)
+-- ============================================================
+local PlayersFolder, killersFolder, survivorsFolder
+
+do
+    -- Try immediately; if anything is missing, wait in the background
+    PlayersFolder = Workspace:FindFirstChild("Players")
+    if PlayersFolder then
+        killersFolder   = PlayersFolder:FindFirstChild("Killers")
+        survivorsFolder = PlayersFolder:FindFirstChild("Survivors")
+    end
+
+    if not (PlayersFolder and killersFolder and survivorsFolder) then
+        task.spawn(function()
+            if not PlayersFolder then
+                PlayersFolder = Workspace:WaitForChild("Players")
+            end
+            if not killersFolder then
+                killersFolder = PlayersFolder:WaitForChild("Killers")
+            end
+            if not survivorsFolder then
+                survivorsFolder = PlayersFolder:WaitForChild("Survivors")
+            end
+            print("[c00lsaken] Game folders resolved.")
+        end)
+    end
+end
 
 -- ============================================================
 -- CONFIG
@@ -266,12 +289,13 @@ local function setAutoBlock(on)
 end
 
 -- ============================================================
--- AUTO PUNCH (cleaned + deduplicated)
+-- AUTO PUNCH
 -- ============================================================
 local LocalCharacter, LocalHumanoid, LocalRoot, SpeedMultipliers, FOVMultipliers
 local isPunching = false
 
 local function GetClosestKiller(Distance)
+    if not killersFolder then return nil end
     Distance = Distance or 55
     local SelectedKiller, SelectedDist
     for _, v in ipairs(killersFolder:GetChildren()) do
@@ -436,6 +460,7 @@ local function addHighlight(model, color)
 end
 
 local function updateKillerESP()
+    if not killersFolder then return end
     clearHighlights(killerHighlights)
     for _, k in ipairs(killersFolder:GetChildren()) do
         if k:IsA("Model") and k:FindFirstChild("HumanoidRootPart") then
@@ -445,6 +470,7 @@ local function updateKillerESP()
 end
 
 local function updateSurvivorESP()
+    if not survivorsFolder then return end
     clearHighlights(survivorHighlights)
     for _, s in ipairs(survivorsFolder:GetChildren()) do
         if s:IsA("Model") and s ~= LocalPlayer.Character and s:FindFirstChild("HumanoidRootPart") then
@@ -575,6 +601,7 @@ local _hdtDebounce = false
 local HDT_SPEED, HDT_DELAY = 5.6, 0
 
 local function getNearestKillerModel()
+    if not killersFolder then return nil end
     local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return nil end
     local closest, closestDist = nil, math.huge
@@ -701,15 +728,11 @@ triggerHDTFromBlock = function()
     end)
 end
 
--- No animation scanner.
--- No sound scanner.
--- Auto Block remains enabled through its original logic.
-
 -- ============================================================
 -- STAMINA (optimized)
 -- ============================================================
 local ok, sprintModule = pcall(function()
-    return ReplicatedStorage.Systems.Character.Game.Sprinting
+    return require(ReplicatedStorage.Systems.Character.Game.Sprinting)
 end)
 
 local maxStaminaValue   = ok and sprintModule.MaxStamina or 100
