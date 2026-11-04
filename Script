@@ -329,7 +329,8 @@ local function SetupPunch(character)
                         selectedPosition
                     )
 
-                    character:SetPrimaryPartCFrame(targetCFrame)
+                    -- Direct CFrame write (replaces SetPrimaryPartCFrame)
+                    LocalRoot.CFrame = targetCFrame
 
                     if not selectedVelocity then
                         selectedVelocity = targetCFrame.LookVector * 32
@@ -428,7 +429,6 @@ local function applyItemHighlight(item)
     local isMedkit = (name == "Medkit" and medkitActive)
     local isBloxy = (name == "BloxyCola" and bloxyActive)
     if not (isMedkit or isBloxy) then return end
-    -- FIXED: search descendants for nested models
     local targetPart = item:IsA("BasePart")
         and item
         or item:FindFirstChildWhichIsA("BasePart", true)
@@ -466,7 +466,6 @@ local function attachGeneratorESP(obj)
     end)
     if genConns[obj] then pcall(function() genConns[obj]:Disconnect() end); genConns[obj] = nil end
 
-    -- FIXED: robust root selection
     local root
 
     if obj:IsA("Model") then
@@ -605,7 +604,6 @@ local function beginDrag(killerModel)
     bv.Velocity = Vector3.new(0, 0, 0)
     bv.Parent = hrp
 
-    -- Turn player to killer during drag
     local bg = Instance.new("BodyGyro")
     bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
     bg.D = 50
@@ -650,8 +648,6 @@ local function beginDrag(killerModel)
     task.delay(0.4, function() if _hdtDebounce then _hdtDebounce = false end end)
 end
 
--- Only trigger HDT for recognized block animations.
--- Each animation track can trigger once per playback.
 local seenBlockTracks = setmetatable({}, {__mode = "k"})
 
 RunService.RenderStepped:Connect(function()
