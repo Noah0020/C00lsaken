@@ -68,7 +68,7 @@ local CONFIG = {
 local function log(msg) if CONFIG.DEBUG then warn("[c00lsaken] " .. msg) end end
 
 -- ============================================================
--- REMOTE / BLOCK
+-- REMOTE
 -- ============================================================
 local _remote = nil
 local function getRemote()
@@ -80,13 +80,30 @@ local function getRemote()
     return nil
 end
 
+-- ============================================================
+-- FORWARD DECLARATION: HDT block trigger
+-- ============================================================
+local triggerHDTFromBlock
+
+-- ============================================================
+-- FIRE BLOCK (+ HDT notify)
+-- ============================================================
 local function fireBlock()
     local abilityContainer = MainUI and MainUI:FindFirstChild("AbilityContainer")
     local blockBtn = abilityContainer and abilityContainer:FindFirstChild("Block")
+
     if blockBtn then
-        local clickBtn = blockBtn:FindFirstChildOfClass("ImageButton") or blockBtn:FindFirstChildOfClass("TextButton") or blockBtn
-        if clickBtn and (clickBtn:IsA("ImageButton") or clickBtn:IsA("TextButton")) then
+        local clickBtn =
+            blockBtn:FindFirstChildOfClass("ImageButton")
+            or blockBtn:FindFirstChildOfClass("TextButton")
+            or blockBtn
+
+        if clickBtn and (
+            clickBtn:IsA("ImageButton")
+            or clickBtn:IsA("TextButton")
+        ) then
             local fired = false
+
             if firesignal then
                 pcall(function()
                     firesignal(clickBtn.MouseButton1Click)
@@ -95,21 +112,38 @@ local function fireBlock()
                     fired = true
                 end)
             end
+
             if not fired then
                 pcall(function()
                     clickBtn.MouseButton1Click:Fire()
                     clickBtn.MouseButton1Down:Fire()
                 end)
             end
+
+            -- Notify HDT after the block button action
+            if triggerHDTFromBlock then
+                triggerHDTFromBlock()
+            end
+
             return true
         end
     end
+
     local re = getRemote()
     if not re then return false end
-    pcall(function()
-        re:FireServer(unpack({"UseActorAbility", { buffer.fromstring("\3\5\0\0\0Block") }}))
+
+    local success = pcall(function()
+        re:FireServer(
+            "UseActorAbility",
+            { buffer.fromstring("\3\5\0\0\0Block") }
+        )
     end)
-    return true
+
+    if success and triggerHDTFromBlock then
+        triggerHDTFromBlock()
+    end
+
+    return success
 end
 
 -- ============================================================
@@ -329,7 +363,7 @@ local function SetupPunch(character)
                         selectedPosition
                     )
 
-                    -- Direct CFrame write (replaces SetPrimaryPartCFrame)
+                    -- Direct CFrame write
                     LocalRoot.CFrame = targetCFrame
 
                     if not selectedVelocity then
@@ -534,26 +568,11 @@ Workspace.DescendantAdded:Connect(function(d)
 end)
 
 -- ============================================================
--- HDT — Animation-only trigger (per-track dedup, no range)
+-- HDT — Remote-trigger (block action) with cooldown
 -- ============================================================
 local hitboxDraggingTech = false
 local _hdtDebounce = false
 local HDT_SPEED, HDT_DELAY = 5.6, 0
-
-local blockAnimIds = {
-    "72722244508749", "96959123077498", "95802026624883",
-    "140671644163156", "100926346851492",
-}
-
-local cachedAnimator = nil
-local function refreshAnimator()
-    local char = LocalPlayer.Character
-    if not char then cachedAnimator = nil; return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    cachedAnimator = hum and hum:FindFirstChildOfClass("Animator") or nil
-end
-LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5); refreshAnimator() end)
-refreshAnimator()
 
 local function getNearestKillerModel()
     local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -648,54 +667,49 @@ local function beginDrag(killerModel)
     task.delay(0.4, function() if _hdtDebounce then _hdtDebounce = false end end)
 end
 
-local seenBlockTracks = setmetatable({}, {__mode = "k"})
+-- ============================================================
+-- NEW HDT TRIGGER (remote-fired block action only)
+-- ============================================================
+local HDT_BLOCK_COOLDOWN = 27
+local lastHDTBlockTime = -math.huge
 
-RunService.RenderStepped:Connect(function()
+triggerHDTFromBlock = function()
     if not hitboxDraggingTech then return end
+    if _hdtDebounce then return end
 
-    if not cachedAnimator then
-        refreshAnimator()
+    local now = os.clock()
+
+    if now - lastHDTBlockTime < HDT_BLOCK_COOLDOWN then
+        return
     end
 
-    if not cachedAnimator then return end
+    local nearest = getNearestKillerModel()
+    if not nearest then return end
 
-    for _, track in ipairs(cachedAnimator:GetPlayingAnimationTracks()) do
-        if not seenBlockTracks[track] then
-            local animId = ""
+    -- Start cooldown when HDT accepts the block trigger
+    lastHDTBlockTime = now
 
-            pcall(function()
-                animId = tostring(
-                    track.Animation and track.Animation.AnimationId or ""
-                ):match("%d+") or ""
-            end)
+    task.delay(HDT_DELAY, function()
+        if not hitboxDraggingTech then return end
+        if _hdtDebounce then return end
 
-            if table.find(blockAnimIds, animId) then
-                seenBlockTracks[track] = true
+        local currentTarget = getNearestKillerModel()
 
-                track.Stopped:Connect(function()
-                    seenBlockTracks[track] = nil
-                end)
-
-                task.delay(HDT_DELAY, function()
-                    if not hitboxDraggingTech then return end
-                    if not track.IsPlaying then return end
-
-                    local nearest = getNearestKillerModel()
-
-                    if nearest then
-                        beginDrag(nearest)
-                    end
-                end)
-            end
+        if currentTarget then
+            beginDrag(currentTarget)
         end
-    end
-end)
+    end)
+end
+
+-- No animation scanner.
+-- No sound scanner.
+-- Auto Block remains enabled through its original logic.
 
 -- ============================================================
 -- STAMINA (optimized)
 -- ============================================================
 local ok, sprintModule = pcall(function()
-    return require(ReplicatedStorage.Systems.Character.Game.Sprinting)
+    return ReplicatedStorage.Systems.Character.Game.Sprinting
 end)
 
 local maxStaminaValue   = ok and sprintModule.MaxStamina or 100
