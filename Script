@@ -232,7 +232,7 @@ local function setAutoBlock(on)
 end
 
 -- ============================================================
--- AUTO PUNCH
+-- AUTO PUNCH (cleaned + deduplicated)
 -- ============================================================
 local LocalCharacter, LocalHumanoid, LocalRoot, SpeedMultipliers, FOVMultipliers
 local isPunching = false
@@ -251,60 +251,124 @@ end
 
 local function FirePunch()
     local re = getRemote()
-    if re then
-        pcall(function()
-            if game.GameId == 6331902150 or game.GameId == 7464167604 then
-                re:FireServer("UseActorAbility", {"Punch"})
-            else
-                re:FireServer("UseActorAbility", "Punch")
-                re:FireServer("UseActorAbility", {"Punch"})
-            end
-        end)
+    if not re then return false end
+
+    local payload
+
+    if game.GameId == 6331902150 or game.GameId == 7464167604 then
+        payload = {"Punch"}
+    else
+        payload = "Punch"
     end
+
+    local success = pcall(function()
+        re:FireServer("UseActorAbility", payload)
+    end)
+
+    return success
 end
 
+local punchConnection
+
 local function SetupPunch(character)
+    if punchConnection then
+        punchConnection:Disconnect()
+        punchConnection = nil
+    end
+
     LocalCharacter = character
     LocalHumanoid = character:WaitForChild("Humanoid", 5)
     LocalRoot = character:WaitForChild("HumanoidRootPart", 5)
     SpeedMultipliers = character:WaitForChild("SpeedMultipliers", 5)
     FOVMultipliers = character:WaitForChild("FOVMultipliers", 5)
-    if not LocalHumanoid then return end
-    LocalCharacter:GetAttributeChangedSignal("TimesHit"):Connect(function()
+
+    if not LocalHumanoid or not LocalRoot then return end
+
+    punchConnection = character:GetAttributeChangedSignal("TimesHit"):Connect(function()
         if not CONFIG.AutoPunch or isPunching then return end
-        if SpeedMultipliers and SpeedMultipliers:FindFirstChild("GuestBlocking") and LocalHumanoid:GetAttribute("Overheal") ~= nil and LocalHumanoid:GetAttribute("Overheal") >= 10 then
-            local TargetKiller = GetClosestKiller()
-            if not TargetKiller then return end
-            isPunching = true
-            task.spawn(function()
-                task.wait(0.08)
-                LocalCharacter:SetAttribute("DisableShiftLockMovement", true)
-                FirePunch()
-                local Timeout = Workspace.DistributedGameTime + 1.25
-                local CameraTarget, SelectedVelocity
-                CameraTarget = RunService.RenderStepped:Connect(function()
-                    local ClosestKiller = GetClosestKiller()
-                    if not ClosestKiller or not ClosestKiller:FindFirstChild("HumanoidRootPart") then return end
-                    local KillerRootPos = ClosestKiller.HumanoidRootPart.Position
-                    local SelectedPosition = Vector3.new(KillerRootPos.X, LocalRoot.Position.Y, KillerRootPos.Z)
-                    local TargetCFrame = CFrame.new(LocalRoot.Position, SelectedPosition)
-                    LocalCharacter:SetPrimaryPartCFrame(TargetCFrame)
-                    if not SelectedVelocity then
-                        LocalRoot.Velocity = TargetCFrame.LookVector * 32
-                        SelectedVelocity = LocalRoot.Velocity
-                    else
-                        SelectedVelocity = LocalRoot.Velocity:Lerp(SelectedVelocity or LocalRoot.Velocity, CONFIG.AutoPunchAccuracy / 100)
-                        LocalRoot.Velocity = SelectedVelocity
-                    end
-                end)
-                repeat task.wait(0.1)
-                until (FOVMultipliers and FOVMultipliers:FindFirstChild("HitRegistered")) or (SpeedMultipliers and not SpeedMultipliers:FindFirstChild("PunchAbility")) or Workspace.DistributedGameTime > Timeout
-                CameraTarget:Disconnect()
-                task.wait(0.2)
-                LocalCharacter:SetAttribute("DisableShiftLockMovement", false)
-                isPunching = false
-            end)
+
+        if not SpeedMultipliers
+            or not SpeedMultipliers:FindFirstChild("GuestBlocking")
+            or (LocalHumanoid:GetAttribute("Overheal") or 0) < 10 then
+            return
         end
+
+        if not GetClosestKiller() then return end
+
+        isPunching = true
+
+        task.spawn(function()
+            local cameraConnection
+            local success, err = pcall(function()
+                task.wait(0.08)
+
+                if not character.Parent or not LocalRoot.Parent then return end
+
+                character:SetAttribute("DisableShiftLockMovement", true)
+                FirePunch()
+
+                local timeout = Workspace.DistributedGameTime + 1.25
+                local selectedVelocity
+
+                cameraConnection = RunService.RenderStepped:Connect(function()
+                    local killer = GetClosestKiller()
+
+                    if not killer or not killer:FindFirstChild("HumanoidRootPart") then
+                        return
+                    end
+
+                    local killerPos = killer.HumanoidRootPart.Position
+                    local selectedPosition = Vector3.new(
+                        killerPos.X,
+                        LocalRoot.Position.Y,
+                        killerPos.Z
+                    )
+
+                    local targetCFrame = CFrame.new(
+                        LocalRoot.Position,
+                        selectedPosition
+                    )
+
+                    character:SetPrimaryPartCFrame(targetCFrame)
+
+                    if not selectedVelocity then
+                        selectedVelocity = targetCFrame.LookVector * 32
+                    else
+                        selectedVelocity = LocalRoot.Velocity:Lerp(
+                            selectedVelocity,
+                            CONFIG.AutoPunchAccuracy / 100
+                        )
+                    end
+
+                    LocalRoot.Velocity = selectedVelocity
+                end)
+
+                repeat
+                    task.wait(0.1)
+                until
+                    (FOVMultipliers and FOVMultipliers:FindFirstChild("HitRegistered"))
+                    or (SpeedMultipliers and not SpeedMultipliers:FindFirstChild("PunchAbility"))
+                    or Workspace.DistributedGameTime > timeout
+                    or not CONFIG.AutoPunch
+                    or not character.Parent
+            end)
+
+            if cameraConnection then
+                cameraConnection:Disconnect()
+            end
+
+            if character and character.Parent then
+                pcall(function()
+                    character:SetAttribute("DisableShiftLockMovement", false)
+                end)
+            end
+
+            isPunching = false
+
+            if not success then
+                warn("[c00lsaken] Auto Punch error:", err)
+            end
+        end)
     end)
 end
 
@@ -364,7 +428,10 @@ local function applyItemHighlight(item)
     local isMedkit = (name == "Medkit" and medkitActive)
     local isBloxy = (name == "BloxyCola" and bloxyActive)
     if not (isMedkit or isBloxy) then return end
-    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart")
+    -- FIXED: search descendants for nested models
+    local targetPart = item:IsA("BasePart")
+        and item
+        or item:FindFirstChildWhichIsA("BasePart", true)
     if not targetPart or targetPart:FindFirstChild("ItemHighlight") then return end
     local hl = Instance.new("Highlight")
     hl.Name = "ItemHighlight"
@@ -398,14 +465,21 @@ local function attachGeneratorESP(obj)
         local oldbb = obj:FindFirstChild("esp_g_bb"); if oldbb then oldbb:Destroy() end
     end)
     if genConns[obj] then pcall(function() genConns[obj]:Disconnect() end); genConns[obj] = nil end
-    local root = obj.PrimaryPart or obj:FindFirstChild("Base") or obj:FindFirstChild("Main")
-    if not root then
-        for _, c in ipairs(obj:GetChildren()) do
-            if c:IsA("BasePart") then root = c; break end
-        end
+
+    -- FIXED: robust root selection
+    local root
+
+    if obj:IsA("Model") then
+        root = obj.PrimaryPart
+            or obj:FindFirstChild("Base")
+            or obj:FindFirstChild("Main")
+            or obj:FindFirstChildWhichIsA("BasePart", true)
+    elseif obj:IsA("BasePart") then
+        root = obj
     end
-    if not root and obj:IsA("BasePart") then root = obj end
+
     if not root then return end
+
     pcall(function()
         local hl = Instance.new("Highlight")
         hl.Name = "esp_g"; hl.FillColor = Color3.fromRGB(255, 255, 0)
@@ -461,7 +535,7 @@ Workspace.DescendantAdded:Connect(function(d)
 end)
 
 -- ============================================================
--- HDT — Animation-only trigger, no range requirement
+-- HDT — Animation-only trigger (per-track dedup, no range)
 -- ============================================================
 local hitboxDraggingTech = false
 local _hdtDebounce = false
@@ -576,31 +650,53 @@ local function beginDrag(killerModel)
     task.delay(0.4, function() if _hdtDebounce then _hdtDebounce = false end end)
 end
 
--- HDT trigger: block animation only (no range check)
+-- Only trigger HDT for recognized block animations.
+-- Each animation track can trigger once per playback.
+local seenBlockTracks = setmetatable({}, {__mode = "k"})
+
 RunService.RenderStepped:Connect(function()
     if not hitboxDraggingTech then return end
-    if not cachedAnimator then refreshAnimator() end
+
+    if not cachedAnimator then
+        refreshAnimator()
+    end
+
     if not cachedAnimator then return end
+
     for _, track in ipairs(cachedAnimator:GetPlayingAnimationTracks()) do
-        local ok, animId = pcall(function()
-            return tostring(track.Animation and track.Animation.AnimationId or ""):match("%d+")
-        end)
-        if ok and animId and table.find(blockAnimIds, animId) then
-            local timePos = 0
-            pcall(function() timePos = track.TimePosition or 0 end)
-            if timePos <= 0.12 then
-                local nearest = getNearestKillerModel()
-                if nearest then
-                    task.wait(HDT_DELAY)
-                    task.spawn(function() beginDrag(nearest) end)
-                end
+        if not seenBlockTracks[track] then
+            local animId = ""
+
+            pcall(function()
+                animId = tostring(
+                    track.Animation and track.Animation.AnimationId or ""
+                ):match("%d+") or ""
+            end)
+
+            if table.find(blockAnimIds, animId) then
+                seenBlockTracks[track] = true
+
+                track.Stopped:Connect(function()
+                    seenBlockTracks[track] = nil
+                end)
+
+                task.delay(HDT_DELAY, function()
+                    if not hitboxDraggingTech then return end
+                    if not track.IsPlaying then return end
+
+                    local nearest = getNearestKillerModel()
+
+                    if nearest then
+                        beginDrag(nearest)
+                    end
+                end)
             end
         end
     end
 end)
 
 -- ============================================================
--- STAMINA
+-- STAMINA (optimized)
 -- ============================================================
 local ok, sprintModule = pcall(function()
     return require(ReplicatedStorage.Systems.Character.Game.Sprinting)
@@ -615,17 +711,20 @@ local regenDelayValue   = ok and sprintModule.StaminaRegenDelay or 0.5
 local infStaminaActive, staminaThread = false, nil
 
 local function enableInfStamina()
-    if not ok then return end
+    if not ok or infStaminaActive then return end
+
     infStaminaActive = true
+
+    sprintModule.MaxStamina = maxStaminaValue
+    sprintModule.SprintSpeed = sprintSpeedValue
+    sprintModule.StaminaGain = staminaGainValue
+    sprintModule.StaminaDrain = staminaDrainValue
+    sprintModule.StaminaRegenDelay = regenDelayValue
+
     staminaThread = task.spawn(function()
         while infStaminaActive do
-            task.wait(0.005)
-            sprintModule.MaxStamina = maxStaminaValue
-            sprintModule.SprintSpeed = sprintSpeedValue
-            sprintModule.StaminaGain = staminaGainValue
-            sprintModule.StaminaDrain = staminaDrainValue
-            sprintModule.StaminaRegenDelay = regenDelayValue
             sprintModule.Stamina = maxStaminaValue
+            task.wait(0.1)
         end
     end)
 end
@@ -875,7 +974,7 @@ BoxR:AddSlider("Outline_Trans", {
 })
 
 -- ============================================================
--- HDT TAB (no range slider)
+-- HDT TAB
 -- ============================================================
 local HDTBox = Tabs.HDT:AddLeftGroupbox("Hitbox Dragging Tech", "cpu")
 
