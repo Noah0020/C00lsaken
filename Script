@@ -111,10 +111,9 @@ local CONFIG = {
     ShowHitboxVisual     = true,
     OutlineThickness     = 0.05,
     OutlineTransparencyValue = 0.6,
-    HitboxWidth          = 6,
-    HitboxLength         = 9,
-    HitboxHeight         = 6,
-    HitboxMultiplier     = 1, -- internal only
+    HitboxWidth          = 6,   -- X size of the box
+    HitboxHeight         = 6,   -- Y size of the box
+    HitboxLength         = 9,   -- Z size of the box (how far it extends forward)
 }
 
 local function log(msg) if CONFIG.DEBUG then warn("[c00lsaken] " .. msg) end end
@@ -204,7 +203,6 @@ local function fireBlock()
                 end)
             end
 
-            -- Fallback trigger (hook may also fire — dedup window handles it)
             if triggerHDTFromBlock then
                 triggerHDTFromBlock()
             end
@@ -231,15 +229,15 @@ local function fireBlock()
 end
 
 -- ============================================================
--- HITBOX (Forsaken-style)
+-- HITBOX (Forsaken-style) — direct size, no multiplier
 -- ============================================================
 local function makeHitboxAndCheck(killerModel, onDetected)
     if not killerModel or not killerModel.Parent then return end
     local killerRoot = killerModel:FindFirstChild("HumanoidRootPart") or killerModel:FindFirstChild("RootPart")
     if not killerRoot then return end
 
-    local m = CONFIG.HitboxMultiplier or 1
-    local size = Vector3.new(CONFIG.HitboxWidth * m, CONFIG.HitboxHeight * m, CONFIG.HitboxLength * m)
+    -- Width = X, Height = Y, Length = Z — direct player-chosen values
+    local size = Vector3.new(CONFIG.HitboxWidth, CONFIG.HitboxHeight, CONFIG.HitboxLength)
 
     local op = OverlapParams.new()
     op.FilterType = Enum.RaycastFilterType.Exclude
@@ -397,7 +395,6 @@ local function SetupPunch(character)
 
     LocalCharacter = character
 
-    -- Non-blocking: poll for Humanoid + Root until they exist (or character dies)
     task.spawn(function()
         local humanoid, root
 
@@ -421,7 +418,6 @@ local function SetupPunch(character)
         punchConnection = character:GetAttributeChangedSignal("TimesHit"):Connect(function()
             if not CONFIG.AutoPunch or isPunching then return end
 
-            -- Resolve speed/FOV multipliers fresh each call so late-loading children are picked up
             local speedMult = character:FindFirstChild("SpeedMultipliers")
             local fovMult = character:FindFirstChild("FOVMultipliers")
 
@@ -467,7 +463,6 @@ local function SetupPunch(character)
                             selectedPosition
                         )
 
-                        -- Direct CFrame write
                         LocalRoot.CFrame = targetCFrame
 
                         if not selectedVelocity then
@@ -779,9 +774,9 @@ end
 -- HDT TRIGGER (deduped between hook & manual fallback)
 -- ============================================================
 local HDT_BLOCK_COOLDOWN = 27
-local HDT_ACCEPT_WINDOW  = 0.2   -- duplicates from hook + manual are dropped within this window
+local HDT_ACCEPT_WINDOW  = 0.2
 
-local lastHDTBlockTime    = -math.huge
+local lastHDTBlockTime     = -math.huge
 local lastHDTTriggerAccept = -math.huge
 
 triggerHDTFromBlock = function()
@@ -790,12 +785,10 @@ triggerHDTFromBlock = function()
 
     local now = os.clock()
 
-    -- Dedup: reject rapid duplicates (hook + manual fallback from fireBlock)
     if now - lastHDTTriggerAccept < HDT_ACCEPT_WINDOW then
         return
     end
 
-    -- Hard cooldown between accepted HDT activations
     if now - lastHDTBlockTime < HDT_BLOCK_COOLDOWN then
         return
     end
@@ -818,7 +811,7 @@ triggerHDTFromBlock = function()
 end
 
 -- ============================================================
--- HDT REMOTE HOOK (independently detect every FireServer block)
+-- HDT REMOTE HOOK (bounded wait — never blocks forever)
 -- ============================================================
 local hdtHookInstalled = false
 
@@ -865,8 +858,20 @@ local function tryInstallHDTHook()
 end
 
 task.spawn(function()
-    while not getRemoteNoYield() do task.wait(0.5) end
-    tryInstallHDTHook()
+    local MAX_ATTEMPTS = 60 -- 30s at 0.5s intervals
+    local attempts = 0
+
+    while attempts < MAX_ATTEMPTS do
+        if getRemoteNoYield() then
+            tryInstallHDTHook()
+            return
+        end
+        attempts = attempts + 1
+        task.wait(0.5)
+    end
+
+    print("[c00lsaken] HDT hook: remote never appeared after 30s.")
+    print("[c00lsaken] HDT will still work via fireBlock() manual fallback.")
 end)
 
 -- ============================================================
@@ -1106,29 +1111,29 @@ ABRight:AddSlider("Punch_Smooth", {
 })
 
 -- ============================================================
--- BOX SETTINGS TAB
+-- BOX SETTINGS TAB  (all integer sliders, no multiplier)
 -- ============================================================
 local BoxL = Tabs.Box:AddLeftGroupbox("Size", "maximize")
 local BoxR = Tabs.Box:AddRightGroupbox("Timing & Visuals", "clock")
 
 BoxL:AddSlider("Box_Width", {
     Text = "Width",
-    Min = 1, Max = 40, Rounding = 1, Default = CONFIG.HitboxWidth,
+    Min = 1, Max = 40, Rounding = 0, Default = CONFIG.HitboxWidth,
     Callback = function(v) CONFIG.HitboxWidth = v end,
 })
 BoxL:AddSlider("Box_Height", {
     Text = "Height",
-    Min = 1, Max = 30, Rounding = 1, Default = CONFIG.HitboxHeight,
+    Min = 1, Max = 30, Rounding = 0, Default = CONFIG.HitboxHeight,
     Callback = function(v) CONFIG.HitboxHeight = v end,
 })
 BoxL:AddSlider("Box_Length", {
     Text = "Length",
-    Min = 1, Max = 40, Rounding = 1, Default = CONFIG.HitboxLength,
+    Min = 1, Max = 40, Rounding = 0, Default = CONFIG.HitboxLength,
     Callback = function(v) CONFIG.HitboxLength = v end,
 })
 BoxL:AddSlider("Box_Distance", {
     Text = "Distance",
-    Min = 1, Max = 20, Rounding = 1, Default = 3,
+    Min = 1, Max = 20, Rounding = 0, Default = 3,
     Callback = function(v) CONFIG.HitboxDistance = v end,
 })
 
@@ -1175,12 +1180,12 @@ HDTBox:AddToggle("HDT_Toggle", {
 })
 HDTBox:AddSlider("HDT_Speed", {
     Text = "HDT Speed",
-    Min = 1, Max = 30, Rounding = 1, Default = 5.6,
+    Min = 1, Max = 30, Rounding = 0, Default = 6,
     Callback = function(v) HDT_SPEED = v end,
 })
 HDTBox:AddSlider("HDT_Delay", {
     Text = "HDT Delay",
-    Min = 0, Max = 2, Rounding = 2, Suffix = "s", Default = 0,
+    Min = 0, Max = 2, Rounding = 1, Suffix = "s", Default = 0,
     Callback = function(v) HDT_DELAY = v end,
 })
 
