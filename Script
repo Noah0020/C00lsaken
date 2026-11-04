@@ -40,7 +40,6 @@ local MainUI            = PlayerGui:WaitForChild("MainUI", 10)
 local PlayersFolder, killersFolder, survivorsFolder
 
 do
-    -- Try immediately; if anything is missing, wait in the background
     PlayersFolder = Workspace:FindFirstChild("Players")
     if PlayersFolder then
         killersFolder   = PlayersFolder:FindFirstChild("Killers")
@@ -58,8 +57,10 @@ do
             if not survivorsFolder then
                 survivorsFolder = PlayersFolder:WaitForChild("Survivors")
             end
-            print("[c00lsaken] Game folders resolved.")
+            print("[c00lsaken] Game folders resolved — features now active.")
         end)
+    else
+        print("[c00lsaken] Game folders already present.")
     end
 end
 
@@ -91,9 +92,10 @@ local CONFIG = {
 local function log(msg) if CONFIG.DEBUG then warn("[c00lsaken] " .. msg) end end
 
 -- ============================================================
--- REMOTE
+-- REMOTE (yielding + non-yielding)
 -- ============================================================
 local _remote = nil
+
 local function getRemote()
     if _remote and _remote.Parent then return _remote end
     local ok, re = pcall(function()
@@ -103,13 +105,44 @@ local function getRemote()
     return nil
 end
 
+-- Non-yielding: safe to call inside hooks
+local function getRemoteNoYield()
+    if _remote and _remote.Parent then return _remote end
+    local mods = ReplicatedStorage:FindFirstChild("Modules")
+    if not mods then return nil end
+    local net1 = mods:FindFirstChild("Network")
+    if not net1 then return nil end
+    local net2 = net1:FindFirstChild("Network")
+    if not net2 then return nil end
+    local re = net2:FindFirstChild("RemoteEvent")
+    if re then _remote = re; return re end
+    return nil
+end
+
 -- ============================================================
--- FORWARD DECLARATION: HDT block trigger
+-- FORWARD DECLARATIONS
 -- ============================================================
 local triggerHDTFromBlock
 
 -- ============================================================
--- FIRE BLOCK (+ HDT notify)
+-- PAYLOAD DETECTION
+-- ============================================================
+local function isBlockPayload(payload)
+    if type(payload) == "string" then
+        return payload == "Block" or payload:find("Block") ~= nil
+    elseif typeof(payload) == "buffer" then
+        local ok, s = pcall(function() return buffer.tostring(payload) end)
+        return ok and s and s:find("Block") ~= nil
+    elseif type(payload) == "table" then
+        for _, v in pairs(payload) do
+            if isBlockPayload(v) then return true end
+        end
+    end
+    return false
+end
+
+-- ============================================================
+-- FIRE BLOCK
 -- ============================================================
 local function fireBlock()
     local abilityContainer = MainUI and MainUI:FindFirstChild("AbilityContainer")
@@ -143,7 +176,7 @@ local function fireBlock()
                 end)
             end
 
-            -- Notify HDT after the block button action
+            -- Fallback trigger if remote hook isn't installed
             if triggerHDTFromBlock then
                 triggerHDTFromBlock()
             end
@@ -594,7 +627,7 @@ Workspace.DescendantAdded:Connect(function(d)
 end)
 
 -- ============================================================
--- HDT — Remote-trigger (block action) with cooldown
+-- HDT — Drag system
 -- ============================================================
 local hitboxDraggingTech = false
 local _hdtDebounce = false
@@ -695,7 +728,7 @@ local function beginDrag(killerModel)
 end
 
 -- ============================================================
--- NEW HDT TRIGGER (remote-fired block action only)
+-- HDT TRIGGER (block action with cooldown)
 -- ============================================================
 local HDT_BLOCK_COOLDOWN = 27
 local lastHDTBlockTime = -math.huge
@@ -713,7 +746,6 @@ triggerHDTFromBlock = function()
     local nearest = getNearestKillerModel()
     if not nearest then return end
 
-    -- Start cooldown when HDT accepts the block trigger
     lastHDTBlockTime = now
 
     task.delay(HDT_DELAY, function()
@@ -729,22 +761,82 @@ triggerHDTFromBlock = function()
 end
 
 -- ============================================================
--- STAMINA (optimized)
+-- HDT REMOTE HOOK (independently detect every FireServer block)
+-- ============================================================
+local hdtHookInstalled = false
+
+local function tryInstallHDTHook()
+    if hdtHookInstalled then return true end
+
+    if not (hookmetamethod and getnamecallmethod) then
+        print("[c00lsaken] HDT hook unavailable (executor lacks hookmetamethod)")
+        return false
+    end
+
+    local ok, err = pcall(function()
+        local oldNamecall
+        oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+            local method = getnamecallmethod()
+
+            if method == "FireServer" then
+                local re = getRemoteNoYield()
+                if re and self == re then
+                    local args = { ... }
+                    if args[1] == "UseActorAbility" and isBlockPayload(args[2]) then
+                        if triggerHDTFromBlock then
+                            task.spawn(function()
+                                triggerHDTFromBlock()
+                            end)
+                        end
+                    end
+                end
+            end
+
+            return oldNamecall(self, ...)
+        end)
+    end)
+
+    if ok then
+        hdtHookInstalled = true
+        print("[c00lsaken] HDT remote hook installed (independent detection active).")
+        return true
+    end
+
+    print("[c00lsaken] HDT remote hook install failed: " .. tostring(err))
+    return false
+end
+
+-- Install on a delay so all defs exist; retries once per second if remote not ready
+task.spawn(function()
+    while not getRemoteNoYield() do task.wait(0.5) end
+    tryInstallHDTHook()
+end)
+
+-- ============================================================
+-- STAMINA (with Init() fallback)
 -- ============================================================
 local ok, sprintModule = pcall(function()
     return require(ReplicatedStorage.Systems.Character.Game.Sprinting)
 end)
 
-local maxStaminaValue   = ok and sprintModule.MaxStamina or 100
-local sprintSpeedValue  = ok and sprintModule.SprintSpeed or 24
-local staminaGainValue  = ok and sprintModule.StaminaGain or 10
-local staminaDrainValue = ok and sprintModule.StaminaDrain or 1
-local regenDelayValue   = ok and sprintModule.StaminaRegenDelay or 0.5
+if ok and sprintModule and not sprintModule.DefaultsSet then
+    pcall(function()
+        if type(sprintModule.Init) == "function" then
+            sprintModule.Init()
+        end
+    end)
+end
+
+local maxStaminaValue   = (ok and sprintModule and sprintModule.MaxStamina) or 100
+local sprintSpeedValue  = (ok and sprintModule and sprintModule.SprintSpeed) or 24
+local staminaGainValue  = (ok and sprintModule and sprintModule.StaminaGain) or 10
+local staminaDrainValue = (ok and sprintModule and sprintModule.StaminaDrain) or 1
+local regenDelayValue   = (ok and sprintModule and sprintModule.StaminaRegenDelay) or 0.5
 
 local infStaminaActive, staminaThread = false, nil
 
 local function enableInfStamina()
-    if not ok or infStaminaActive then return end
+    if not ok or not sprintModule or infStaminaActive then return end
 
     infStaminaActive = true
 
@@ -878,7 +970,7 @@ StamLeft:AddSlider("Max_Stamina", {
     Min = 1, Max = 1000, Rounding = 0, Default = maxStaminaValue,
     Callback = function(v)
         maxStaminaValue = v
-        if ok then sprintModule.MaxStamina = v end
+        if ok and sprintModule then sprintModule.MaxStamina = v end
     end,
 })
 
@@ -887,7 +979,7 @@ StamLeft:AddSlider("Sprint_Speed", {
     Min = 1, Max = 30, Rounding = 0, Default = sprintSpeedValue,
     Callback = function(v)
         sprintSpeedValue = v
-        if ok then sprintModule.SprintSpeed = v end
+        if ok and sprintModule then sprintModule.SprintSpeed = v end
     end,
 })
 
@@ -896,7 +988,7 @@ StamLeft:AddSlider("Stamina_Gain", {
     Min = 1, Max = 1000, Rounding = 0, Default = staminaGainValue,
     Callback = function(v)
         staminaGainValue = v
-        if ok then sprintModule.StaminaGain = v end
+        if ok and sprintModule then sprintModule.StaminaGain = v end
     end,
 })
 
@@ -905,7 +997,7 @@ StamLeft:AddSlider("Stamina_Drain", {
     Min = 0, Max = 1000, Rounding = 0, Default = staminaDrainValue,
     Callback = function(v)
         staminaDrainValue = v
-        if ok then sprintModule.StaminaDrain = v end
+        if ok and sprintModule then sprintModule.StaminaDrain = v end
     end,
 })
 
@@ -914,7 +1006,7 @@ StamLeft:AddSlider("Regen_Delay", {
     Min = 0, Max = 10, Rounding = 1, Suffix = "s", Default = regenDelayValue,
     Callback = function(v)
         regenDelayValue = v
-        if ok then sprintModule.StaminaRegenDelay = v end
+        if ok and sprintModule then sprintModule.StaminaRegenDelay = v end
     end,
 })
 
