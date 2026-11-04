@@ -32,7 +32,35 @@ local Debris            = game:GetService("Debris")
 local Workspace         = game:GetService("Workspace")
 local LocalPlayer       = Players.LocalPlayer
 local PlayerGui         = LocalPlayer:WaitForChild("PlayerGui")
-local MainUI            = PlayerGui:WaitForChild("MainUI", 10)
+
+-- ============================================================
+-- MAINUI — lazy getter (recovers if it appears late)
+-- ============================================================
+local MainUI = nil
+
+local function getMainUI()
+    if MainUI and MainUI.Parent then return MainUI end
+    MainUI = PlayerGui:FindFirstChild("MainUI")
+    return MainUI
+end
+
+PlayerGui.ChildAdded:Connect(function(child)
+    if child.Name == "MainUI" then
+        MainUI = child
+        print("[c00lsaken] MainUI resolved.")
+    end
+end)
+
+task.spawn(function()
+    for _ = 1, 100 do
+        if getMainUI() then
+            print("[c00lsaken] MainUI present at load.")
+            return
+        end
+        task.wait(0.2)
+    end
+    print("[c00lsaken] MainUI not yet present — will resolve on arrival.")
+end)
 
 -- ============================================================
 -- FOLDER LOADING (non-blocking — UI always loads)
@@ -105,7 +133,6 @@ local function getRemote()
     return nil
 end
 
--- Non-yielding: safe to call inside hooks
 local function getRemoteNoYield()
     if _remote and _remote.Parent then return _remote end
     local mods = ReplicatedStorage:FindFirstChild("Modules")
@@ -145,7 +172,8 @@ end
 -- FIRE BLOCK
 -- ============================================================
 local function fireBlock()
-    local abilityContainer = MainUI and MainUI:FindFirstChild("AbilityContainer")
+    local ui = getMainUI()
+    local abilityContainer = ui and ui:FindFirstChild("AbilityContainer")
     local blockBtn = abilityContainer and abilityContainer:FindFirstChild("Block")
 
     if blockBtn then
@@ -176,7 +204,7 @@ local function fireBlock()
                 end)
             end
 
-            -- Fallback trigger if remote hook isn't installed
+            -- Fallback trigger (hook may also fire — dedup window handles it)
             if triggerHDTFromBlock then
                 triggerHDTFromBlock()
             end
@@ -324,15 +352,15 @@ end
 -- ============================================================
 -- AUTO PUNCH
 -- ============================================================
-local LocalCharacter, LocalHumanoid, LocalRoot, SpeedMultipliers, FOVMultipliers
+local LocalCharacter, LocalHumanoid, LocalRoot
 local isPunching = false
 
 local function GetClosestKiller(Distance)
-    if not killersFolder then return nil end
+    if not killersFolder or not LocalRoot then return nil end
     Distance = Distance or 55
     local SelectedKiller, SelectedDist
     for _, v in ipairs(killersFolder:GetChildren()) do
-        if Players:GetPlayerFromCharacter(v) and LocalRoot and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChildOfClass("Humanoid") and v:FindFirstChildOfClass("Humanoid").Health > 0 then
+        if Players:GetPlayerFromCharacter(v) and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChildOfClass("Humanoid") and v:FindFirstChildOfClass("Humanoid").Health > 0 then
             local dist = (v.HumanoidRootPart.Position - LocalRoot.Position).Magnitude
             if dist < Distance then Distance = dist; SelectedKiller = v; SelectedDist = dist end
         end
@@ -368,98 +396,118 @@ local function SetupPunch(character)
     end
 
     LocalCharacter = character
-    LocalHumanoid = character:WaitForChild("Humanoid", 5)
-    LocalRoot = character:WaitForChild("HumanoidRootPart", 5)
-    SpeedMultipliers = character:WaitForChild("SpeedMultipliers", 5)
-    FOVMultipliers = character:WaitForChild("FOVMultipliers", 5)
 
-    if not LocalHumanoid or not LocalRoot then return end
+    -- Non-blocking: poll for Humanoid + Root until they exist (or character dies)
+    task.spawn(function()
+        local humanoid, root
 
-    punchConnection = character:GetAttributeChangedSignal("TimesHit"):Connect(function()
-        if not CONFIG.AutoPunch or isPunching then return end
-
-        if not SpeedMultipliers
-            or not SpeedMultipliers:FindFirstChild("GuestBlocking")
-            or (LocalHumanoid:GetAttribute("Overheal") or 0) < 10 then
-            return
+        while character.Parent do
+            humanoid = character:FindFirstChildOfClass("Humanoid")
+            root = character:FindFirstChild("HumanoidRootPart")
+            if humanoid and root then break end
+            task.wait(0.2)
         end
 
-        if not GetClosestKiller() then return end
+        if not humanoid or not root or not character.Parent then return end
 
-        isPunching = true
+        LocalHumanoid = humanoid
+        LocalRoot = root
 
-        task.spawn(function()
-            local cameraConnection
-            local success, err = pcall(function()
-                task.wait(0.08)
+        if punchConnection then
+            punchConnection:Disconnect()
+            punchConnection = nil
+        end
 
-                if not character.Parent or not LocalRoot.Parent then return end
+        punchConnection = character:GetAttributeChangedSignal("TimesHit"):Connect(function()
+            if not CONFIG.AutoPunch or isPunching then return end
 
-                character:SetAttribute("DisableShiftLockMovement", true)
-                FirePunch()
+            -- Resolve speed/FOV multipliers fresh each call so late-loading children are picked up
+            local speedMult = character:FindFirstChild("SpeedMultipliers")
+            local fovMult = character:FindFirstChild("FOVMultipliers")
 
-                local timeout = Workspace.DistributedGameTime + 1.25
-                local selectedVelocity
+            if not speedMult
+                or not speedMult:FindFirstChild("GuestBlocking")
+                or (LocalHumanoid:GetAttribute("Overheal") or 0) < 10 then
+                return
+            end
 
-                cameraConnection = RunService.RenderStepped:Connect(function()
-                    local killer = GetClosestKiller()
+            if not GetClosestKiller() then return end
 
-                    if not killer or not killer:FindFirstChild("HumanoidRootPart") then
-                        return
-                    end
+            isPunching = true
 
-                    local killerPos = killer.HumanoidRootPart.Position
-                    local selectedPosition = Vector3.new(
-                        killerPos.X,
-                        LocalRoot.Position.Y,
-                        killerPos.Z
-                    )
+            task.spawn(function()
+                local cameraConnection
+                local success, err = pcall(function()
+                    task.wait(0.08)
 
-                    local targetCFrame = CFrame.new(
-                        LocalRoot.Position,
-                        selectedPosition
-                    )
+                    if not character.Parent or not LocalRoot.Parent then return end
 
-                    -- Direct CFrame write
-                    LocalRoot.CFrame = targetCFrame
+                    character:SetAttribute("DisableShiftLockMovement", true)
+                    FirePunch()
 
-                    if not selectedVelocity then
-                        selectedVelocity = targetCFrame.LookVector * 32
-                    else
-                        selectedVelocity = LocalRoot.Velocity:Lerp(
-                            selectedVelocity,
-                            CONFIG.AutoPunchAccuracy / 100
+                    local timeout = Workspace.DistributedGameTime + 1.25
+                    local selectedVelocity
+
+                    cameraConnection = RunService.RenderStepped:Connect(function()
+                        local killer = GetClosestKiller()
+
+                        if not killer or not killer:FindFirstChild("HumanoidRootPart") then
+                            return
+                        end
+
+                        local killerPos = killer.HumanoidRootPart.Position
+                        local selectedPosition = Vector3.new(
+                            killerPos.X,
+                            LocalRoot.Position.Y,
+                            killerPos.Z
                         )
-                    end
 
-                    LocalRoot.Velocity = selectedVelocity
+                        local targetCFrame = CFrame.new(
+                            LocalRoot.Position,
+                            selectedPosition
+                        )
+
+                        -- Direct CFrame write
+                        LocalRoot.CFrame = targetCFrame
+
+                        if not selectedVelocity then
+                            selectedVelocity = targetCFrame.LookVector * 32
+                        else
+                            selectedVelocity = LocalRoot.Velocity:Lerp(
+                                selectedVelocity,
+                                CONFIG.AutoPunchAccuracy / 100
+                            )
+                        end
+
+                        LocalRoot.Velocity = selectedVelocity
+                    end)
+
+                    repeat
+                        task.wait(0.1)
+                    until
+                        (fovMult and fovMult:FindFirstChild("HitRegistered"))
+                        or (speedMult and not speedMult:FindFirstChild("PunchAbility"))
+                        or Workspace.DistributedGameTime > timeout
+                        or not CONFIG.AutoPunch
+                        or not character.Parent
                 end)
 
-                repeat
-                    task.wait(0.1)
-                until
-                    (FOVMultipliers and FOVMultipliers:FindFirstChild("HitRegistered"))
-                    or (SpeedMultipliers and not SpeedMultipliers:FindFirstChild("PunchAbility"))
-                    or Workspace.DistributedGameTime > timeout
-                    or not CONFIG.AutoPunch
-                    or not character.Parent
+                if cameraConnection then
+                    cameraConnection:Disconnect()
+                end
+
+                if character and character.Parent then
+                    pcall(function()
+                        character:SetAttribute("DisableShiftLockMovement", false)
+                    end)
+                end
+
+                isPunching = false
+
+                if not success then
+                    warn("[c00lsaken] Auto Punch error:", err)
+                end
             end)
-
-            if cameraConnection then
-                cameraConnection:Disconnect()
-            end
-
-            if character and character.Parent then
-                pcall(function()
-                    character:SetAttribute("DisableShiftLockMovement", false)
-                end)
-            end
-
-            isPunching = false
-
-            if not success then
-                warn("[c00lsaken] Auto Punch error:", err)
-            end
         end)
     end)
 end
@@ -728,10 +776,13 @@ local function beginDrag(killerModel)
 end
 
 -- ============================================================
--- HDT TRIGGER (block action with cooldown)
+-- HDT TRIGGER (deduped between hook & manual fallback)
 -- ============================================================
 local HDT_BLOCK_COOLDOWN = 27
-local lastHDTBlockTime = -math.huge
+local HDT_ACCEPT_WINDOW  = 0.2   -- duplicates from hook + manual are dropped within this window
+
+local lastHDTBlockTime    = -math.huge
+local lastHDTTriggerAccept = -math.huge
 
 triggerHDTFromBlock = function()
     if not hitboxDraggingTech then return end
@@ -739,6 +790,12 @@ triggerHDTFromBlock = function()
 
     local now = os.clock()
 
+    -- Dedup: reject rapid duplicates (hook + manual fallback from fireBlock)
+    if now - lastHDTTriggerAccept < HDT_ACCEPT_WINDOW then
+        return
+    end
+
+    -- Hard cooldown between accepted HDT activations
     if now - lastHDTBlockTime < HDT_BLOCK_COOLDOWN then
         return
     end
@@ -746,14 +803,14 @@ triggerHDTFromBlock = function()
     local nearest = getNearestKillerModel()
     if not nearest then return end
 
-    lastHDTBlockTime = now
+    lastHDTTriggerAccept = now
+    lastHDTBlockTime     = now
 
     task.delay(HDT_DELAY, function()
         if not hitboxDraggingTech then return end
         if _hdtDebounce then return end
 
         local currentTarget = getNearestKillerModel()
-
         if currentTarget then
             beginDrag(currentTarget)
         end
@@ -769,7 +826,8 @@ local function tryInstallHDTHook()
     if hdtHookInstalled then return true end
 
     if not (hookmetamethod and getnamecallmethod) then
-        print("[c00lsaken] HDT hook unavailable (executor lacks hookmetamethod)")
+        print("[c00lsaken] HDT hook unavailable (executor lacks hookmetamethod/getnamecallmethod).")
+        print("[c00lsaken] HDT will still work via fireBlock() manual fallback.")
         return false
     end
 
@@ -806,14 +864,13 @@ local function tryInstallHDTHook()
     return false
 end
 
--- Install on a delay so all defs exist; retries once per second if remote not ready
 task.spawn(function()
     while not getRemoteNoYield() do task.wait(0.5) end
     tryInstallHDTHook()
 end)
 
 -- ============================================================
--- STAMINA (with Init() fallback)
+-- STAMINA (safe writes — no crash if fields are read-only)
 -- ============================================================
 local ok, sprintModule = pcall(function()
     return require(ReplicatedStorage.Systems.Character.Game.Sprinting)
@@ -825,6 +882,14 @@ if ok and sprintModule and not sprintModule.DefaultsSet then
             sprintModule.Init()
         end
     end)
+end
+
+local function setStaminaField(field, value)
+    if not (ok and sprintModule) then return false end
+    local success = pcall(function()
+        sprintModule[field] = value
+    end)
+    return success
 end
 
 local maxStaminaValue   = (ok and sprintModule and sprintModule.MaxStamina) or 100
@@ -840,15 +905,15 @@ local function enableInfStamina()
 
     infStaminaActive = true
 
-    sprintModule.MaxStamina = maxStaminaValue
-    sprintModule.SprintSpeed = sprintSpeedValue
-    sprintModule.StaminaGain = staminaGainValue
-    sprintModule.StaminaDrain = staminaDrainValue
-    sprintModule.StaminaRegenDelay = regenDelayValue
+    setStaminaField("MaxStamina", maxStaminaValue)
+    setStaminaField("SprintSpeed", sprintSpeedValue)
+    setStaminaField("StaminaGain", staminaGainValue)
+    setStaminaField("StaminaDrain", staminaDrainValue)
+    setStaminaField("StaminaRegenDelay", regenDelayValue)
 
     staminaThread = task.spawn(function()
         while infStaminaActive do
-            sprintModule.Stamina = maxStaminaValue
+            setStaminaField("Stamina", maxStaminaValue)
             task.wait(0.1)
         end
     end)
@@ -970,7 +1035,7 @@ StamLeft:AddSlider("Max_Stamina", {
     Min = 1, Max = 1000, Rounding = 0, Default = maxStaminaValue,
     Callback = function(v)
         maxStaminaValue = v
-        if ok and sprintModule then sprintModule.MaxStamina = v end
+        setStaminaField("MaxStamina", v)
     end,
 })
 
@@ -979,7 +1044,7 @@ StamLeft:AddSlider("Sprint_Speed", {
     Min = 1, Max = 30, Rounding = 0, Default = sprintSpeedValue,
     Callback = function(v)
         sprintSpeedValue = v
-        if ok and sprintModule then sprintModule.SprintSpeed = v end
+        setStaminaField("SprintSpeed", v)
     end,
 })
 
@@ -988,7 +1053,7 @@ StamLeft:AddSlider("Stamina_Gain", {
     Min = 1, Max = 1000, Rounding = 0, Default = staminaGainValue,
     Callback = function(v)
         staminaGainValue = v
-        if ok and sprintModule then sprintModule.StaminaGain = v end
+        setStaminaField("StaminaGain", v)
     end,
 })
 
@@ -997,7 +1062,7 @@ StamLeft:AddSlider("Stamina_Drain", {
     Min = 0, Max = 1000, Rounding = 0, Default = staminaDrainValue,
     Callback = function(v)
         staminaDrainValue = v
-        if ok and sprintModule then sprintModule.StaminaDrain = v end
+        setStaminaField("StaminaDrain", v)
     end,
 })
 
@@ -1006,7 +1071,7 @@ StamLeft:AddSlider("Regen_Delay", {
     Min = 0, Max = 10, Rounding = 1, Suffix = "s", Default = regenDelayValue,
     Callback = function(v)
         regenDelayValue = v
-        if ok and sprintModule then sprintModule.StaminaRegenDelay = v end
+        setStaminaField("StaminaRegenDelay", v)
     end,
 })
 
