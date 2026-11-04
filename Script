@@ -106,14 +106,14 @@ local CONFIG = {
     HitboxTransparency   = 0.8,
     HitboxColor          = Color3.fromRGB(255, 255, 255),
     HitboxHitColor       = Color3.fromRGB(0, 255, 0),
-    HitboxDistance       = 3,
+    HitboxDistance       = 3,   -- exposed as "Offset"
     ShowOutline          = true,
     ShowHitboxVisual     = true,
     OutlineThickness     = 0.05,
     OutlineTransparencyValue = 0.6,
-    HitboxWidth          = 6,   -- X size of the box
-    HitboxHeight         = 6,   -- Y size of the box
-    HitboxLength         = 9,   -- Z size of the box (how far it extends forward)
+    HitboxWidth          = 6,
+    HitboxHeight         = 6,
+    HitboxLength         = 9,
 }
 
 local function log(msg) if CONFIG.DEBUG then warn("[c00lsaken] " .. msg) end end
@@ -236,7 +236,6 @@ local function makeHitboxAndCheck(killerModel, onDetected)
     local killerRoot = killerModel:FindFirstChild("HumanoidRootPart") or killerModel:FindFirstChild("RootPart")
     if not killerRoot then return end
 
-    -- Width = X, Height = Y, Length = Z — direct player-chosen values
     local size = Vector3.new(CONFIG.HitboxWidth, CONFIG.HitboxHeight, CONFIG.HitboxLength)
 
     local op = OverlapParams.new()
@@ -674,7 +673,14 @@ end)
 -- ============================================================
 local hitboxDraggingTech = false
 local _hdtDebounce = false
-local HDT_SPEED, HDT_DELAY = 5.6, 0
+local HDT_SPEED, HDT_DELAY = 6, 0
+
+-- Protection: block HDT while AbilitiesDisabled is true
+local function isHDTBlocked()
+    local character = LocalPlayer.Character
+    if not character then return true end
+    return character:GetAttribute("AbilitiesDisabled") == true
+end
 
 local function getNearestKillerModel()
     if not killersFolder then return nil end
@@ -699,6 +705,7 @@ local function getKillerHRP(model)
 end
 
 local function beginDrag(killerModel)
+    if isHDTBlocked() then return end
     if _hdtDebounce then return end
     if not killerModel or not killerModel.Parent then return end
     local char = LocalPlayer.Character
@@ -771,7 +778,7 @@ local function beginDrag(killerModel)
 end
 
 -- ============================================================
--- HDT TRIGGER (deduped between hook & manual fallback)
+-- HDT TRIGGER (deduped + AbilitiesDisabled protection)
 -- ============================================================
 local HDT_BLOCK_COOLDOWN = 27
 local HDT_ACCEPT_WINDOW  = 0.2
@@ -780,6 +787,9 @@ local lastHDTBlockTime     = -math.huge
 local lastHDTTriggerAccept = -math.huge
 
 triggerHDTFromBlock = function()
+    -- Protection before accepting the HDT trigger
+    if isHDTBlocked() then return end
+
     if not hitboxDraggingTech then return end
     if _hdtDebounce then return end
 
@@ -800,6 +810,9 @@ triggerHDTFromBlock = function()
     lastHDTBlockTime     = now
 
     task.delay(HDT_DELAY, function()
+        -- Check again after the delay
+        if isHDTBlocked() then return end
+
         if not hitboxDraggingTech then return end
         if _hdtDebounce then return end
 
@@ -1111,7 +1124,7 @@ ABRight:AddSlider("Punch_Smooth", {
 })
 
 -- ============================================================
--- BOX SETTINGS TAB  (all integer sliders, no multiplier)
+-- BOX SETTINGS TAB  (Distance renamed to Offset)
 -- ============================================================
 local BoxL = Tabs.Box:AddLeftGroupbox("Size", "maximize")
 local BoxR = Tabs.Box:AddRightGroupbox("Timing & Visuals", "clock")
@@ -1131,8 +1144,8 @@ BoxL:AddSlider("Box_Length", {
     Min = 1, Max = 40, Rounding = 0, Default = CONFIG.HitboxLength,
     Callback = function(v) CONFIG.HitboxLength = v end,
 })
-BoxL:AddSlider("Box_Distance", {
-    Text = "Distance",
+BoxL:AddSlider("Box_Offset", {
+    Text = "Offset",
     Min = 1, Max = 20, Rounding = 0, Default = 3,
     Callback = function(v) CONFIG.HitboxDistance = v end,
 })
