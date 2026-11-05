@@ -1,26 +1,4 @@
---// c00lsaken | Obsidian UI — Red Theme
-
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
-
-local Options = Library.Options
-Library.ForceCheckbox = false
-Library.ShowToggleFrameInKeybinds = true
-
---// Red theme
-ThemeManager:SetLibrary(Library)
-ThemeManager:SetFolder("c00lsaken")
-
-ThemeManager:SetDefaultTheme({
-    FontColor        = Color3.fromRGB(245, 245, 245),
-    MainColor        = Color3.fromRGB(25, 15, 18),
-    AccentColor      = Color3.fromRGB(200, 25, 45),
-    BackgroundColor  = Color3.fromRGB(12, 10, 12),
-    OutlineColor     = Color3.fromRGB(100, 25, 35),
-})
+--// c00lsaken 2077 | Custom Cyberpunk UI
 
 -- ============================================================
 -- SERVICES
@@ -31,6 +9,7 @@ local RunService        = game:GetService("RunService")
 local Debris            = game:GetService("Debris")
 local Workspace         = game:GetService("Workspace")
 local UserInputService  = game:GetService("UserInputService")
+local TweenService      = game:GetService("TweenService")
 local LocalPlayer       = Players.LocalPlayer
 local PlayerGui         = LocalPlayer:WaitForChild("PlayerGui")
 
@@ -48,19 +27,7 @@ end
 PlayerGui.ChildAdded:Connect(function(child)
     if child.Name == "MainUI" then
         MainUI = child
-        print("[c00lsaken] MainUI resolved.")
     end
-end)
-
-task.spawn(function()
-    for _ = 1, 100 do
-        if getMainUI() then
-            print("[c00lsaken] MainUI present at load.")
-            return
-        end
-        task.wait(0.2)
-    end
-    print("[c00lsaken] MainUI not yet present — will resolve on arrival.")
 end)
 
 -- ============================================================
@@ -116,8 +83,6 @@ local CONFIG = {
     HitboxHeight         = 6,
     HitboxLength         = 9,
 }
-
-local function log(msg) if CONFIG.DEBUG then warn("[c00lsaken] " .. msg) end end
 
 -- ============================================================
 -- REMOTE
@@ -369,20 +334,10 @@ end
 local function FirePunch()
     local re = getRemote()
     if not re then return false end
-
-    local payload
-
-    if game.GameId == 6331902150 or game.GameId == 7464167604 then
-        payload = {"Punch"}
-    else
-        payload = "Punch"
-    end
-
-    local success = pcall(function()
+    local payload = (game.GameId == 6331902150 or game.GameId == 7464167604) and {"Punch"} or "Punch"
+    return pcall(function()
         re:FireServer("UseActorAbility", payload)
     end)
-
-    return success
 end
 
 local punchConnection
@@ -432,7 +387,8 @@ local function SetupPunch(character)
             isPunching = true
 
             task.spawn(function()
-                local cameraConnection
+                local renderConn
+                local aimGyro
                 local success, err = pcall(function()
                     task.wait(0.08)
 
@@ -441,40 +397,43 @@ local function SetupPunch(character)
                     character:SetAttribute("DisableShiftLockMovement", true)
                     FirePunch()
 
+                    aimGyro = Instance.new("BodyGyro")
+                    aimGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    aimGyro.D = 100
+                    aimGyro.P = 3000
+                    aimGyro.Parent = LocalRoot
+
                     local timeout = Workspace.DistributedGameTime + 1.25
-                    local selectedVelocity
+                    local smoothedDir
+                    local BASE_SPEED = 32
 
-                    cameraConnection = RunService.RenderStepped:Connect(function()
+                    renderConn = RunService.RenderStepped:Connect(function()
                         local killer = GetClosestKiller()
-
                         if not killer or not killer:FindFirstChild("HumanoidRootPart") then
                             return
                         end
 
                         local killerPos = killer.HumanoidRootPart.Position
-                        local selectedPosition = Vector3.new(
-                            killerPos.X,
-                            LocalRoot.Position.Y,
-                            killerPos.Z
-                        )
+                        local flatTarget = Vector3.new(killerPos.X, LocalRoot.Position.Y, killerPos.Z)
+                        local toTarget   = flatTarget - LocalRoot.Position
 
-                        local targetCFrame = CFrame.new(
-                            LocalRoot.Position,
-                            selectedPosition
-                        )
+                        if toTarget.Magnitude < 0.05 then return end
 
-                        LocalRoot.CFrame = targetCFrame
+                        local targetCFrame = CFrame.lookAt(LocalRoot.Position, flatTarget)
+                        aimGyro.CFrame = targetCFrame
 
-                        if not selectedVelocity then
-                            selectedVelocity = targetCFrame.LookVector * 32
+                        local desiredDir = toTarget.Unit
+                        if not smoothedDir then
+                            smoothedDir = desiredDir
                         else
-                            selectedVelocity = LocalRoot.Velocity:Lerp(
-                                selectedVelocity,
-                                CONFIG.AutoPunchAccuracy / 100
-                            )
+                            local alpha = CONFIG.AutoPunchAccuracy / 100
+                            smoothedDir = smoothedDir:Lerp(desiredDir, alpha)
+                            if smoothedDir.Magnitude > 0 then
+                                smoothedDir = smoothedDir.Unit
+                            end
                         end
 
-                        LocalRoot.Velocity = selectedVelocity
+                        LocalRoot.Velocity = smoothedDir * BASE_SPEED
                     end)
 
                     repeat
@@ -487,9 +446,8 @@ local function SetupPunch(character)
                         or not character.Parent
                 end)
 
-                if cameraConnection then
-                    cameraConnection:Disconnect()
-                end
+                if renderConn then renderConn:Disconnect() end
+                if aimGyro and aimGyro.Parent then pcall(function() aimGyro:Destroy() end) end
 
                 if character and character.Parent then
                     pcall(function()
@@ -511,9 +469,9 @@ if LocalPlayer.Character then SetupPunch(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(SetupPunch)
 
 -- ============================================================
--- BACKSTAB SYSTEM (HunterStab)
+-- BACKSTAB
 -- ============================================================
-local HS_CFG = {
+local BS_CFG = {
     Enabled        = false,
     BehindOffset   = 2,
     MaxRange       = 60,
@@ -522,44 +480,44 @@ local HS_CFG = {
     FollowDuration = 0.5,
 }
 
-local HS_lastStab        = 0
-local HS_stabbing        = false
-local HS_lerpConn        = nil
-local HS_originalAutoRot = true
+local BS_lastStab        = 0
+local BS_stabbing        = false
+local BS_lerpConn        = nil
+local BS_originalAutoRot = true
 
-local HS_DAGGER_ANIM_IDS = {
+local BS_DAGGER_ANIM_IDS = {
     ["100725497418533"] = true,
     ["89448354637442"]  = true,
 }
 
-local function hsGetKillerFolder()
+local function bsGetKillerFolder()
     local p = Workspace:FindFirstChild("Players")
     return p and p:FindFirstChild("Killers")
 end
 
-local function hsGetKHRP(model)
+local function bsGetKHRP(model)
     if not model then return nil end
     return model:FindFirstChild("HumanoidRootPart")
         or model.PrimaryPart
         or model:FindFirstChildWhichIsA("BasePart", true)
 end
 
-local function hsGetMyHRP()
+local function bsGetMyHRP()
     local c = LocalPlayer.Character
     return c and c:FindFirstChild("HumanoidRootPart")
 end
 
-local function hsGetMyHum()
+local function bsGetMyHum()
     local c = LocalPlayer.Character
     return c and c:FindFirstChildOfClass("Humanoid")
 end
 
-local function hsGetKiller()
-    local f = hsGetKillerFolder()
+local function bsGetKiller()
+    local f = bsGetKillerFolder()
     if not f then return nil, nil end
     for _, k in ipairs(f:GetChildren()) do
         if k:IsA("Model") then
-            local h = hsGetKHRP(k)
+            local h = bsGetKHRP(k)
             local hum = k:FindFirstChildOfClass("Humanoid")
             if h and hum and hum.Health > 0 then
                 return k, h
@@ -569,55 +527,49 @@ local function hsGetKiller()
     return nil, nil
 end
 
-local function hsIsDagger(track)
+local function bsIsDagger(track)
     local a = track and track.Animation
     if not a then return false end
     local n = tostring(a.AnimationId):match("%d+")
-    return n and HS_DAGGER_ANIM_IDS[n] == true
+    return n and BS_DAGGER_ANIM_IDS[n] == true
 end
 
-local function hsStopLerp()
-    if HS_lerpConn then
-        pcall(function() HS_lerpConn:Disconnect() end)
-        HS_lerpConn = nil
+local function bsStopLerp()
+    if BS_lerpConn then
+        pcall(function() BS_lerpConn:Disconnect() end)
+        BS_lerpConn = nil
     end
-    local hum = hsGetMyHum()
-    if hum then hum.AutoRotate = HS_originalAutoRot end
-    HS_stabbing = false
+    local hum = bsGetMyHum()
+    if hum then hum.AutoRotate = BS_originalAutoRot end
+    BS_stabbing = false
 end
 
-local function hsFollowBehind(killerModel)
-    if HS_lerpConn then
-        pcall(function() HS_lerpConn:Disconnect() end)
-        HS_lerpConn = nil
+local function bsFollowBehind(killerModel)
+    if BS_lerpConn then
+        pcall(function() BS_lerpConn:Disconnect() end)
+        BS_lerpConn = nil
     end
 
-    local myHum = hsGetMyHum()
-    HS_originalAutoRot = myHum and myHum.AutoRotate or true
+    local myHum = bsGetMyHum()
+    BS_originalAutoRot = myHum and myHum.AutoRotate or true
     if myHum then myHum.AutoRotate = false end
 
-    local endTime = os.clock() + HS_CFG.FollowDuration
+    local endTime = os.clock() + BS_CFG.FollowDuration
 
-    HS_lerpConn = RunService.RenderStepped:Connect(function()
-        if os.clock() >= endTime or not HS_stabbing then
-            hsStopLerp()
+    BS_lerpConn = RunService.RenderStepped:Connect(function()
+        if os.clock() >= endTime or not BS_stabbing then
+            bsStopLerp()
             return
         end
 
-        local h = hsGetMyHRP()
-        if not h then
-            hsStopLerp()
-            return
-        end
+        local h = bsGetMyHRP()
+        if not h then bsStopLerp(); return end
 
-        local kHRP = killerModel and hsGetKHRP(killerModel)
-        if not kHRP or not kHRP.Parent then
-            hsStopLerp()
-            return
-        end
+        local kHRP = killerModel and bsGetKHRP(killerModel)
+        if not kHRP or not kHRP.Parent then bsStopLerp(); return end
 
         local kCF = kHRP.CFrame
-        local behindPos = kCF.Position - kCF.LookVector * HS_CFG.BehindOffset
+        local behindPos = kCF.Position - kCF.LookVector * BS_CFG.BehindOffset
         local targetCF = CFrame.lookAt(
             Vector3.new(behindPos.X, h.Position.Y, behindPos.Z),
             Vector3.new(kCF.Position.X, h.Position.Y, kCF.Position.Z)
@@ -628,58 +580,57 @@ local function hsFollowBehind(killerModel)
     end)
 end
 
-local function hsHunterStab()
-    if not HS_CFG.Enabled then return end
-    if HS_stabbing then return end
-    if os.clock() - HS_lastStab < HS_CFG.Cooldown then return end
+local function bsHunterStab()
+    if not BS_CFG.Enabled then return end
+    if BS_stabbing then return end
+    if os.clock() - BS_lastStab < BS_CFG.Cooldown then return end
 
-    local myHRP = hsGetMyHRP()
+    local myHRP = bsGetMyHRP()
     if not myHRP then return end
 
-    local killer, kHRP = hsGetKiller()
+    local killer, kHRP = bsGetKiller()
     if not killer or not kHRP then return end
 
     local dist = (kHRP.Position - myHRP.Position).Magnitude
-    if dist > HS_CFG.MaxRange then return end
+    if dist > BS_CFG.MaxRange then return end
 
-    HS_stabbing = true
-    HS_lastStab = os.clock()
+    BS_stabbing = true
+    BS_lastStab = os.clock()
 
     local kCF = kHRP.CFrame
-    local behindPos = kCF.Position - kCF.LookVector * HS_CFG.BehindOffset
+    local behindPos = kCF.Position - kCF.LookVector * BS_CFG.BehindOffset
     local origin = myHRP.CFrame
     local behind = CFrame.lookAt(
         Vector3.new(behindPos.X, origin.Position.Y, behindPos.Z),
         Vector3.new(kCF.Position.X, origin.Position.Y, kCF.Position.Z)
     )
 
-    task.wait(HS_CFG.TeleportDelay)
+    task.wait(BS_CFG.TeleportDelay)
 
-    local now = hsGetMyHRP()
-    if not now then HS_stabbing = false return end
+    local now = bsGetMyHRP()
+    if not now then BS_stabbing = false return end
     now.CFrame = behind
     now.AssemblyLinearVelocity = Vector3.zero
 
-    hsFollowBehind(killer)
+    bsFollowBehind(killer)
 end
 
-_G.C00lsakenHunterStab = hsHunterStab
+_G.C00lsakenBackstab = bsHunterStab
 
--- Animation binding (event-driven, no time cap)
-local hsHookedAnims = setmetatable({}, {__mode = "k"})
+local bsHookedAnims = setmetatable({}, {__mode = "k"})
 
-local function hsHookAnimator(anim)
+local function bsHookAnimator(anim)
     if not anim or not anim:IsA("Animator") then return end
-    if hsHookedAnims[anim] then return end
-    hsHookedAnims[anim] = true
+    if bsHookedAnims[anim] then return end
+    bsHookedAnims[anim] = true
 
     anim.AnimationPlayed:Connect(function(t)
-        if not t or not hsIsDagger(t) then return end
-        hsHunterStab()
+        if not t or not bsIsDagger(t) then return end
+        bsHunterStab()
     end)
 end
 
-local function hsBindCharacter(character)
+local function bsBindCharacter(character)
     if not character then return end
 
     local humanoidBound = false
@@ -692,11 +643,11 @@ local function hsBindCharacter(character)
         humanoidBound = true
 
         local anim = hum:FindFirstChildOfClass("Animator")
-        if anim then hsHookAnimator(anim) end
+        if anim then bsHookAnimator(anim) end
 
         hum.ChildAdded:Connect(function(child)
             if child:IsA("Animator") then
-                hsHookAnimator(child)
+                bsHookAnimator(child)
             end
         end)
 
@@ -726,22 +677,21 @@ local function hsBindCharacter(character)
     end)
 end
 
-if LocalPlayer.Character then hsBindCharacter(LocalPlayer.Character) end
+if LocalPlayer.Character then bsBindCharacter(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(function(c)
-    hsStopLerp()
-    hsBindCharacter(c)
+    bsStopLerp()
+    bsBindCharacter(c)
 end)
 
--- Hotkey H
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     if input.KeyCode == Enum.KeyCode.H then
-        hsHunterStab()
+        bsHunterStab()
     end
 end)
 
 -- ============================================================
--- HDT — Drag system
+-- HDT
 -- ============================================================
 local hitboxDraggingTech = false
 local _hdtDebounce = false
@@ -808,6 +758,16 @@ local function beginDrag(killerModel)
     bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
     bg.D = 50
     bg.P = 3000
+
+    do
+        local lookTarget = Vector3.new(targetHRP.Position.X, hrp.Position.Y, targetHRP.Position.Z)
+        if (lookTarget - hrp.Position).Magnitude > 0.1 then
+            bg.CFrame = CFrame.lookAt(hrp.Position, lookTarget)
+        else
+            bg.CFrame = hrp.CFrame
+        end
+    end
+
     bg.Parent = hrp
 
     local conn
@@ -850,7 +810,6 @@ end
 
 local HDT_BLOCK_COOLDOWN = 27
 local HDT_ACCEPT_WINDOW  = 0.2
-
 local lastHDTBlockTime     = -math.huge
 local lastHDTTriggerAccept = -math.huge
 
@@ -861,12 +820,8 @@ triggerHDTFromBlock = function()
 
     local now = os.clock()
 
-    if now - lastHDTTriggerAccept < HDT_ACCEPT_WINDOW then
-        return
-    end
-    if now - lastHDTBlockTime < HDT_BLOCK_COOLDOWN then
-        return
-    end
+    if now - lastHDTTriggerAccept < HDT_ACCEPT_WINDOW then return end
+    if now - lastHDTBlockTime < HDT_BLOCK_COOLDOWN then return end
 
     local nearest = getNearestKillerModel()
     if not nearest then return end
@@ -889,37 +844,28 @@ triggerHDTFromBlock = function()
     end)
 end
 
--- ============================================================
--- HDT REMOTE HOOK
--- ============================================================
+-- HDT remote hook
 local hdtHookInstalled = false
 
 local function tryInstallHDTHook()
     if hdtHookInstalled then return true end
-    if not (hookmetamethod and getnamecallmethod) then
-        print("[c00lsaken] HDT hook unavailable — using fireBlock() fallback.")
-        return false
-    end
+    if not (hookmetamethod and getnamecallmethod) then return false end
 
-    local ok, err = pcall(function()
+    local ok = pcall(function()
         local oldNamecall
         oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
             local method = getnamecallmethod()
-
             if method == "FireServer" then
                 local re = getRemoteNoYield()
                 if re and self == re then
                     local args = { ... }
                     if args[1] == "UseActorAbility" and isBlockPayload(args[2]) then
                         if triggerHDTFromBlock then
-                            task.spawn(function()
-                                triggerHDTFromBlock()
-                            end)
+                            task.spawn(function() triggerHDTFromBlock() end)
                         end
                     end
                 end
             end
-
             return oldNamecall(self, ...)
         end)
     end)
@@ -929,15 +875,12 @@ local function tryInstallHDTHook()
         print("[c00lsaken] HDT remote hook installed.")
         return true
     end
-
-    print("[c00lsaken] HDT remote hook install failed: " .. tostring(err))
     return false
 end
 
 task.spawn(function()
-    local MAX_ATTEMPTS = 60
     local attempts = 0
-    while attempts < MAX_ATTEMPTS do
+    while attempts < 60 do
         if getRemoteNoYield() then
             tryInstallHDTHook()
             return
@@ -945,7 +888,6 @@ task.spawn(function()
         attempts = attempts + 1
         task.wait(0.5)
     end
-    print("[c00lsaken] HDT hook: remote never appeared after 30s.")
 end)
 
 -- ============================================================
@@ -1003,9 +945,7 @@ local function applyItemHighlight(item)
     local isMedkit = (name == "Medkit" and medkitActive)
     local isBloxy = (name == "BloxyCola" and bloxyActive)
     if not (isMedkit or isBloxy) then return end
-    local targetPart = item:IsA("BasePart")
-        and item
-        or item:FindFirstChildWhichIsA("BasePart", true)
+    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true)
     if not targetPart or targetPart:FindFirstChild("ItemHighlight") then return end
     local hl = Instance.new("Highlight")
     hl.Name = "ItemHighlight"
@@ -1025,10 +965,6 @@ local function applyItemHighlight(item)
     hl.Parent = targetPart
 end
 
-local function clearItemESP(name)
-    clearHighlights(itemHighlights[name])
-end
-
 local genESPActive = false
 local genConns = {}
 
@@ -1041,16 +977,11 @@ local function attachGeneratorESP(obj)
     if genConns[obj] then pcall(function() genConns[obj]:Disconnect() end); genConns[obj] = nil end
 
     local root
-
     if obj:IsA("Model") then
-        root = obj.PrimaryPart
-            or obj:FindFirstChild("Base")
-            or obj:FindFirstChild("Main")
-            or obj:FindFirstChildWhichIsA("BasePart", true)
+        root = obj.PrimaryPart or obj:FindFirstChild("Base") or obj:FindFirstChild("Main") or obj:FindFirstChildWhichIsA("BasePart", true)
     elseif obj:IsA("BasePart") then
         root = obj
     end
-
     if not root then return end
 
     pcall(function()
@@ -1124,10 +1055,7 @@ end
 
 local function setStaminaField(field, value)
     if not (ok and sprintModule) then return false end
-    local success = pcall(function()
-        sprintModule[field] = value
-    end)
-    return success
+    return pcall(function() sprintModule[field] = value end)
 end
 
 local maxStaminaValue   = (ok and sprintModule and sprintModule.MaxStamina) or 100
@@ -1160,334 +1088,782 @@ local function disableInfStamina()
 end
 
 -- ============================================================
--- WINDOW
+-- CUSTOM CYBERPUNK UI
 -- ============================================================
-local Window = Library:CreateWindow({
-    Title = "c00lsaken",
-    Footer = "c00lsaken",
-    NotifySide = "Right",
-    ShowCustomCursor = true,
-    Resizable = true,
-})
+local Old = PlayerGui:FindFirstChild("C00LSAKEN2077")
+if Old then Old:Destroy() end
 
-local Tabs = {
-    ESP       = Window:AddTab("ESP", "eye"),
-    Stam      = Window:AddTab("Stam", "zap"),
-    AutoBlock = Window:AddTab("Auto Block", "shield"),
-    Box       = Window:AddTab("Box Settings", "box"),
-    HDT       = Window:AddTab("HDT", "cpu"),
-    Backstab  = Window:AddTab("Backstab", "sword"),
-    Config    = Window:AddTab("Save and Config", "save"),
+local C = {
+    Black = Color3.fromRGB(8, 10, 13),
+    Panel = Color3.fromRGB(15, 18, 23),
+    Panel2 = Color3.fromRGB(23, 27, 33),
+    Yellow = Color3.fromRGB(252, 238, 10),
+    Cyan = Color3.fromRGB(0, 229, 255),
+    Red = Color3.fromRGB(255, 55, 70),
+    White = Color3.fromRGB(235, 240, 245),
+    Grey = Color3.fromRGB(135, 145, 155)
+}
+
+local function tween(obj, props, duration)
+    local info = TweenInfo.new(duration or 0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    local t = TweenService:Create(obj, info, props)
+    t:Play()
+    return t
+end
+
+local function corner(obj, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 4)
+    c.Parent = obj
+    return c
+end
+
+local function outline(obj, color, thickness)
+    local s = Instance.new("UIStroke")
+    s.Color = color
+    s.Thickness = thickness or 1
+    s.Parent = obj
+    return s
+end
+
+local function makeLabel(parent, text, size, color, font)
+    local l = Instance.new("TextLabel")
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextSize = size or 13
+    l.TextColor3 = color or C.White
+    l.Font = font or Enum.Font.GothamMedium
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextYAlignment = Enum.TextYAlignment.Center
+    l.Parent = parent
+    return l
+end
+
+local function makeButton(parent, text, size, position)
+    local b = Instance.new("TextButton")
+    b.AutoButtonColor = false
+    b.Text = text
+    b.TextSize = 13
+    b.Font = Enum.Font.GothamBold
+    b.TextColor3 = C.White
+    b.BackgroundColor3 = C.Panel2
+    b.Size = size
+    b.Position = position
+    b.Parent = parent
+    corner(b, 4)
+    return b
+end
+
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "C00LSAKEN2077"
+Gui.ResetOnSpawn = false
+Gui.IgnoreGuiInset = true
+Gui.DisplayOrder = 100
+Gui.Parent = PlayerGui
+
+local Background = Instance.new("Frame")
+Background.Name = "Background"
+Background.Size = UDim2.fromScale(1, 1)
+Background.BackgroundColor3 = C.Black
+Background.BackgroundTransparency = 0.25
+Background.BorderSizePixel = 0
+Background.Parent = Gui
+
+local Gradient = Instance.new("UIGradient")
+Gradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(5, 8, 12)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(18, 20, 27)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 8, 12))
+})
+Gradient.Rotation = 45
+Gradient.Parent = Background
+
+local Scanline = Instance.new("Frame")
+Scanline.Size = UDim2.new(1, 0, 0, 2)
+Scanline.BackgroundColor3 = C.Cyan
+Scanline.BackgroundTransparency = 0.92
+Scanline.BorderSizePixel = 0
+Scanline.ZIndex = 2
+Scanline.Parent = Background
+
+local Main = Instance.new("Frame")
+Main.Name = "MainWindow"
+Main.AnchorPoint = Vector2.new(0.5, 0.5)
+Main.Position = UDim2.fromScale(0.5, 0.5)
+Main.Size = UDim2.fromOffset(760, 500)
+Main.BackgroundColor3 = C.Black
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Parent = Gui
+
+corner(Main, 6)
+local MainStroke = outline(Main, C.Yellow, 1.5)
+
+local Scale = Instance.new("UIScale")
+Scale.Parent = Main
+
+local function updateScale()
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    local size = camera.ViewportSize
+    Scale.Scale = math.clamp(math.min(size.X / 850, size.Y / 620), 0.55, 1)
+end
+
+local viewportConnection
+local function connectCamera()
+    if viewportConnection then viewportConnection:Disconnect() end
+    local camera = workspace.CurrentCamera
+    if camera then
+        viewportConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+    end
+    updateScale()
+end
+
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(connectCamera)
+connectCamera()
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 65)
+Header.BackgroundColor3 = Color3.fromRGB(19, 22, 27)
+Header.BorderSizePixel = 0
+Header.Parent = Main
+
+local HeaderLine = Instance.new("Frame")
+HeaderLine.Size = UDim2.new(1, 0, 0, 2)
+HeaderLine.Position = UDim2.new(0, 0, 1, -2)
+HeaderLine.BackgroundColor3 = C.Yellow
+HeaderLine.BorderSizePixel = 0
+HeaderLine.Parent = Header
+
+local Logo = makeLabel(Header, "C00LSAKEN 2077", 23, C.Yellow, Enum.Font.GothamBlack)
+Logo.Position = UDim2.fromOffset(20, 0)
+Logo.Size = UDim2.new(1, -100, 1, 0)
+
+local Close = makeButton(Header, "X", UDim2.fromOffset(34, 30), UDim2.new(1, -45, 0, 17))
+Close.BackgroundColor3 = C.Red
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Position = UDim2.fromOffset(0, 65)
+Sidebar.Size = UDim2.new(0, 150, 1, -65)
+Sidebar.BackgroundColor3 = Color3.fromRGB(12, 15, 19)
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = Main
+
+local SidebarTitle = makeLabel(Sidebar, "MENU", 11, C.Grey, Enum.Font.GothamBold)
+SidebarTitle.Position = UDim2.fromOffset(15, 15)
+SidebarTitle.Size = UDim2.new(1, -20, 0, 25)
+
+local NavContainer = Instance.new("ScrollingFrame")
+NavContainer.Position = UDim2.fromOffset(8, 48)
+NavContainer.Size = UDim2.new(1, -16, 1, -60)
+NavContainer.BackgroundTransparency = 1
+NavContainer.BorderSizePixel = 0
+NavContainer.ScrollBarThickness = 3
+NavContainer.ScrollBarImageColor3 = C.Yellow
+NavContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+NavContainer.CanvasSize = UDim2.new()
+NavContainer.Parent = Sidebar
+
+local NavLayout = Instance.new("UIListLayout")
+NavLayout.Padding = UDim.new(0, 8)
+NavLayout.Parent = NavContainer
+
+local Content = Instance.new("ScrollingFrame")
+Content.Name = "Content"
+Content.Position = UDim2.fromOffset(166, 78)
+Content.Size = UDim2.new(1, -182, 1, -95)
+Content.BackgroundTransparency = 1
+Content.BorderSizePixel = 0
+Content.ScrollBarThickness = 3
+Content.ScrollBarImageColor3 = C.Yellow
+Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Content.CanvasSize = UDim2.new()
+Content.Parent = Main
+
+local ContentLayout = Instance.new("UIListLayout")
+ContentLayout.Padding = UDim.new(0, 12)
+ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ContentLayout.Parent = Content
+
+local Padding = Instance.new("UIPadding")
+Padding.PaddingRight = UDim.new(0, 8)
+Padding.PaddingBottom = UDim.new(0, 10)
+Padding.Parent = Content
+
+local Notification = Instance.new("Frame")
+Notification.AnchorPoint = Vector2.new(1, 0)
+Notification.Position = UDim2.new(1, -15, 0, 15)
+Notification.Size = UDim2.fromOffset(260, 65)
+Notification.BackgroundColor3 = C.Panel
+Notification.Visible = false
+Notification.Parent = Gui
+corner(Notification, 5)
+outline(Notification, C.Yellow)
+
+local NotificationTitle = makeLabel(Notification, "NOTIFICATION", 11, C.Yellow)
+NotificationTitle.Position = UDim2.fromOffset(12, 7)
+NotificationTitle.Size = UDim2.new(1, -20, 0, 20)
+
+local NotificationText = makeLabel(Notification, "", 12, C.White)
+NotificationText.Position = UDim2.fromOffset(12, 30)
+NotificationText.Size = UDim2.new(1, -20, 0, 25)
+
+local notificationId = 0
+local function notify(message)
+    notificationId += 1
+    local id = notificationId
+    NotificationText.Text = message
+    Notification.Visible = true
+    Notification.BackgroundTransparency = 1
+    Notification.Position = UDim2.new(1, 20, 0, 15)
+    tween(Notification, { Position = UDim2.new(1, -15, 0, 15), BackgroundTransparency = 0 })
+    task.delay(2.5, function()
+        if notificationId ~= id then return end
+        tween(Notification, { Position = UDim2.new(1, 20, 0, 15), BackgroundTransparency = 1 })
+        task.wait(0.3)
+        if notificationId == id then Notification.Visible = false end
+    end)
+end
+
+-- ============================================================
+-- COMPONENTS
+-- ============================================================
+local function createSection(title)
+    local section = Instance.new("Frame")
+    section.Size = UDim2.new(1, 0, 0, 42)
+    section.BackgroundColor3 = C.Panel2
+    section.BorderSizePixel = 0
+    section.Parent = Content
+    corner(section, 4)
+
+    local accent = Instance.new("Frame")
+    accent.Size = UDim2.new(0, 3, 1, 0)
+    accent.BackgroundColor3 = C.Yellow
+    accent.BorderSizePixel = 0
+    accent.Parent = section
+
+    local text = makeLabel(section, title, 13, C.Yellow, Enum.Font.GothamBold)
+    text.Position = UDim2.fromOffset(14, 0)
+    text.Size = UDim2.new(1, -20, 1, 0)
+    return section
+end
+
+local function createInfo(title, description)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 76)
+    card.BackgroundColor3 = C.Panel
+    card.BorderSizePixel = 0
+    card.Parent = Content
+    corner(card, 4)
+    outline(card, Color3.fromRGB(45, 53, 63))
+
+    local t = makeLabel(card, title, 13, C.White, Enum.Font.GothamBold)
+    t.Position = UDim2.fromOffset(14, 8)
+    t.Size = UDim2.new(1, -25, 0, 24)
+
+    local d = makeLabel(card, description, 11, C.Grey)
+    d.Position = UDim2.fromOffset(14, 35)
+    d.Size = UDim2.new(1, -25, 0, 28)
+    d.TextWrapped = true
+    return card
+end
+
+local function createToggle(title, description, default, callback)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 70)
+    card.BackgroundColor3 = C.Panel
+    card.BorderSizePixel = 0
+    card.Parent = Content
+    corner(card, 4)
+    outline(card, Color3.fromRGB(45, 53, 63))
+
+    local t = makeLabel(card, title, 13, C.White, Enum.Font.GothamBold)
+    t.Position = UDim2.fromOffset(12, 7)
+    t.Size = UDim2.new(1, -100, 0, 23)
+
+    local d = makeLabel(card, description, 10, C.Grey)
+    d.Position = UDim2.fromOffset(12, 34)
+    d.Size = UDim2.new(1, -100, 0, 22)
+    d.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local toggle = makeButton(card, "", UDim2.fromOffset(48, 25), UDim2.new(1, -60, 0.5, -12))
+    local enabled = default
+
+    local function update()
+        toggle.BackgroundColor3 = enabled and C.Yellow or C.Panel2
+        toggle.Text = enabled and "ON" or "OFF"
+        toggle.TextColor3 = enabled and C.Black or C.Grey
+    end
+
+    update()
+
+    toggle.Activated:Connect(function()
+        enabled = not enabled
+        update()
+        callback(enabled)
+    end)
+
+    return {
+        Set = function(v) enabled = v; update(); callback(enabled) end,
+        Get = function() return enabled end
+    }
+end
+
+local function createSlider(title, minimum, maximum, default, callback, decimals)
+    decimals = decimals or 0
+    local mult = 10 ^ decimals
+
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 85)
+    card.BackgroundColor3 = C.Panel
+    card.BorderSizePixel = 0
+    card.Parent = Content
+    corner(card, 4)
+    outline(card, Color3.fromRGB(45, 53, 63))
+
+    local t = makeLabel(card, title, 12, C.White, Enum.Font.GothamBold)
+    t.Position = UDim2.fromOffset(12, 6)
+    t.Size = UDim2.new(1, -65, 0, 25)
+
+    local valueLabel = makeLabel(card, string.format("%." .. decimals .. "f", default), 12, C.Yellow)
+    valueLabel.Position = UDim2.new(1, -70, 0, 6)
+    valueLabel.Size = UDim2.fromOffset(58, 25)
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+    local bar = Instance.new("Frame")
+    bar.Position = UDim2.fromOffset(12, 49)
+    bar.Size = UDim2.new(1, -24, 0, 7)
+    bar.BackgroundColor3 = C.Panel2
+    bar.BorderSizePixel = 0
+    bar.Parent = card
+    corner(bar, 5)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.fromScale((default - minimum) / (maximum - minimum), 1)
+    fill.BackgroundColor3 = C.Yellow
+    fill.BorderSizePixel = 0
+    fill.Parent = bar
+    corner(fill, 5)
+
+    local dragging = false
+    local value = default
+
+    local function setValue(x)
+        local percent = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+        local raw = minimum + percent * (maximum - minimum)
+        value = math.floor(raw * mult + 0.5) / mult
+        fill.Size = UDim2.fromScale(percent, 1)
+        valueLabel.Text = string.format("%." .. decimals .. "f", value)
+        callback(value)
+    end
+
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            setValue(input.Position.X)
+        end
+    end)
+
+    local changedConn = UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            setValue(input.Position.X)
+        end
+    end)
+
+    local endedConn = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    card.Destroying:Connect(function()
+        changedConn:Disconnect()
+        endedConn:Disconnect()
+    end)
+
+    return {
+        Get = function() return value end,
+        Set = function(v)
+            value = v
+            local percent = math.clamp((v - minimum) / (maximum - minimum), 0, 1)
+            fill.Size = UDim2.fromScale(percent, 1)
+            valueLabel.Text = string.format("%." .. decimals .. "f", v)
+        end
+    }
+end
+
+local function createButton(text, callback, color)
+    local b = makeButton(Content, text, UDim2.new(1, 0, 0, 42), UDim2.new())
+    b.BackgroundColor3 = color or C.Red
+    b.TextSize = 14
+    b.Activated:Connect(function()
+        if callback then callback() end
+    end)
+    return b
+end
+
+-- ============================================================
+-- TABS
+-- ============================================================
+local Tabs = { "OVERVIEW", "ESP", "STAM", "AUTO BLOCK", "BOX", "HDT", "BACKSTAB" }
+local TabButtons = {}
+local CurrentTab = "OVERVIEW"
+
+local function clearContent()
+    for _, child in ipairs(Content:GetChildren()) do
+        if child ~= ContentLayout and child ~= Padding then
+            child:Destroy()
+        end
+    end
+end
+
+-- ============================================================
+-- FEATURE STATE SNAPSHOTS (for UI rebuild persistence)
+-- ============================================================
+local STATE = {
+    AutoBlock = false,
+    AutoPunch = false,
+    InfStamina = false,
+    ShowBoxVisual = CONFIG.ShowHitboxVisual,
+    ShowOutline = CONFIG.ShowOutline,
+    HUD_Effects = true,
 }
 
 -- ============================================================
--- ESP TAB
+-- LOAD TAB
 -- ============================================================
-local ESPLeft  = Tabs.ESP:AddLeftGroupbox("Players", "user")
-local ESPRight = Tabs.ESP:AddRightGroupbox("Items & Objectives", "package")
+local function loadTab(tab)
+    CurrentTab = tab
+    clearContent()
 
-ESPLeft:AddToggle("ESP_Killer", {
-    Text = "Killer ESP",
-    Default = false,
-    Callback = function(state)
-        killerESPActive = state
-        if killerESPActive then
-            killerESPThread = task.spawn(function()
-                while killerESPActive do updateKillerESP(); task.wait(2) end
-            end)
-        else
-            if killerESPThread then task.cancel(killerESPThread); killerESPThread = nil end
-            clearHighlights(killerHighlights)
-        end
-    end,
-})
+    if tab == "OVERVIEW" then
 
-ESPLeft:AddToggle("ESP_Survivor", {
-    Text = "Survivor ESP",
-    Default = false,
-    Callback = function(state)
-        survivorESPActive = state
-        if survivorESPActive then
-            survivorESPThread = task.spawn(function()
-                while survivorESPActive do updateSurvivorESP(); task.wait(2) end
-            end)
-        else
-            if survivorESPThread then task.cancel(survivorESPThread); survivorESPThread = nil end
-            clearHighlights(survivorHighlights)
-        end
-    end,
-})
+        createSection("OVERVIEW")
+        createInfo("PLAYER", LocalPlayer.DisplayName .. "  //  @" .. LocalPlayer.Name)
+        createInfo("PLATFORM", UserInputService.TouchEnabled and "MOBILE" or "DESKTOP")
+        createInfo("VERSION", "C00LSAKEN 2077")
 
-ESPRight:AddToggle("ESP_Medkit", {
-    Text = "Medkit ESP",
-    Default = false,
-    Callback = function(state)
-        medkitActive = state
-        if state then
-            for _, item in ipairs(Workspace:GetDescendants()) do
-                if item.Name == "Medkit" then applyItemHighlight(item) end
+        createSection("QUICK SETTINGS")
+        createToggle("HUD EFFECTS", "Enable decorative interface effects", STATE.HUD_Effects, function(v)
+            STATE.HUD_Effects = v
+            Scanline.Visible = v
+            notify("HUD effects " .. (v and "enabled" or "disabled"))
+        end)
+
+    elseif tab == "ESP" then
+
+        createSection("PLAYERS")
+        createToggle("KILLER ESP", "Highlight all killers in red", killerESPActive, function(state)
+            killerESPActive = state
+            if killerESPActive then
+                killerESPThread = task.spawn(function()
+                    while killerESPActive do updateKillerESP(); task.wait(2) end
+                end)
+            else
+                if killerESPThread then task.cancel(killerESPThread); killerESPThread = nil end
+                clearHighlights(killerHighlights)
             end
-        else clearItemESP("Medkit") end
-    end,
-})
+        end)
 
-ESPRight:AddToggle("ESP_Bloxy", {
-    Text = "BloxyCola ESP",
-    Default = false,
-    Callback = function(state)
-        bloxyActive = state
-        if state then
-            for _, item in ipairs(Workspace:GetDescendants()) do
-                if item.Name == "BloxyCola" then applyItemHighlight(item) end
+        createToggle("SURVIVOR ESP", "Highlight all survivors in green", survivorESPActive, function(state)
+            survivorESPActive = state
+            if survivorESPActive then
+                survivorESPThread = task.spawn(function()
+                    while survivorESPActive do updateSurvivorESP(); task.wait(2) end
+                end)
+            else
+                if survivorESPThread then task.cancel(survivorESPThread); survivorESPThread = nil end
+                clearHighlights(survivorHighlights)
             end
-        else clearItemESP("BloxyCola") end
-    end,
-})
+        end)
 
-ESPRight:AddToggle("ESP_Generator", {
-    Text = "Generator ESP",
-    Default = false,
-    Callback = function(state)
-        genESPActive = state
-        scanGenerators(state)
-    end,
-})
+        createSection("ITEMS")
+        createToggle("MEDKIT ESP", "Highlight medkits", medkitActive, function(state)
+            medkitActive = state
+            if state then
+                for _, item in ipairs(Workspace:GetDescendants()) do
+                    if item.Name == "Medkit" then applyItemHighlight(item) end
+                end
+            else
+                clearHighlights(itemHighlights.Medkit)
+            end
+        end)
 
--- ============================================================
--- STAM TAB
--- ============================================================
-local StamLeft = Tabs.Stam:AddLeftGroupbox("Stamina", "zap")
+        createToggle("BLOXY COLA ESP", "Highlight bloxy colas", bloxyActive, function(state)
+            bloxyActive = state
+            if state then
+                for _, item in ipairs(Workspace:GetDescendants()) do
+                    if item.Name == "BloxyCola" then applyItemHighlight(item) end
+                end
+            else
+                clearHighlights(itemHighlights.BloxyCola)
+            end
+        end)
 
-StamLeft:AddToggle("Inf_Stam", {
-    Text = "Infinite Stamina",
-    Default = false,
-    Callback = function(state)
-        if state then enableInfStamina() else disableInfStamina() end
-    end,
-})
+        createSection("OBJECTIVES")
+        createToggle("GENERATOR ESP", "Highlight generators", genESPActive, function(state)
+            genESPActive = state
+            scanGenerators(state)
+        end)
 
-StamLeft:AddSlider("Max_Stamina", {
-    Text = "Max Stamina",
-    Min = 1, Max = 1000, Rounding = 0, Default = maxStaminaValue,
-    Callback = function(v)
-        maxStaminaValue = v
-        setStaminaField("MaxStamina", v)
-    end,
-})
+    elseif tab == "STAM" then
 
-StamLeft:AddSlider("Sprint_Speed", {
-    Text = "Sprint Speed",
-    Min = 1, Max = 30, Rounding = 0, Default = sprintSpeedValue,
-    Callback = function(v)
-        sprintSpeedValue = v
-        setStaminaField("SprintSpeed", v)
-    end,
-})
+        createSection("STAMINA")
+        createToggle("INFINITE STAMINA", "Never drain stamina", infStaminaActive, function(state)
+            if state then enableInfStamina() else disableInfStamina() end
+        end)
 
-StamLeft:AddSlider("Stamina_Gain", {
-    Text = "Stamina Gain",
-    Min = 1, Max = 1000, Rounding = 0, Default = staminaGainValue,
-    Callback = function(v)
-        staminaGainValue = v
-        setStaminaField("StaminaGain", v)
-    end,
-})
+        createSection("TUNING")
+        createSlider("MAX STAMINA", 1, 1000, maxStaminaValue, function(v)
+            maxStaminaValue = v
+            setStaminaField("MaxStamina", v)
+        end, 0)
 
-StamLeft:AddSlider("Stamina_Drain", {
-    Text = "Stamina Drain",
-    Min = 0, Max = 1000, Rounding = 0, Default = staminaDrainValue,
-    Callback = function(v)
-        staminaDrainValue = v
-        setStaminaField("StaminaDrain", v)
-    end,
-})
+        createSlider("SPRINT SPEED", 1, 30, sprintSpeedValue, function(v)
+            sprintSpeedValue = v
+            setStaminaField("SprintSpeed", v)
+        end, 0)
 
-StamLeft:AddSlider("Regen_Delay", {
-    Text = "Regen Delay",
-    Min = 0, Max = 10, Rounding = 1, Suffix = "s", Default = regenDelayValue,
-    Callback = function(v)
-        regenDelayValue = v
-        setStaminaField("StaminaRegenDelay", v)
-    end,
-})
+        createSlider("STAMINA GAIN", 1, 1000, staminaGainValue, function(v)
+            staminaGainValue = v
+            setStaminaField("StaminaGain", v)
+        end, 0)
 
--- ============================================================
--- AUTO BLOCK TAB
--- ============================================================
-local ABLeft  = Tabs.AutoBlock:AddLeftGroupbox("Auto Block", "shield")
-local ABRight = Tabs.AutoBlock:AddRightGroupbox("Auto Punch", "sword")
+        createSlider("STAMINA DRAIN", 0, 1000, staminaDrainValue, function(v)
+            staminaDrainValue = v
+            setStaminaField("StaminaDrain", v)
+        end, 0)
 
-ABLeft:AddToggle("Auto_Block", {
-    Text = "Auto Block",
-    Default = false,
-    Callback = function(state) setAutoBlock(state) end,
-})
+        createSlider("REGEN DELAY (s)", 0, 10, regenDelayValue, function(v)
+            regenDelayValue = v
+            setStaminaField("StaminaRegenDelay", v)
+        end, 1)
 
-ABLeft:AddToggle("Debug_Log", {
-    Text = "Debug Log",
-    Default = true,
-    Callback = function(v) CONFIG.DEBUG = v end,
-})
+    elseif tab == "AUTO BLOCK" then
 
-ABRight:AddToggle("Auto_Punch", {
-    Text = "Auto Punch",
-    Default = false,
-    Callback = function(state) CONFIG.AutoPunch = state end,
-})
+        createSection("AUTO BLOCK")
+        createToggle("AUTO BLOCK", "Automatically block incoming attacks", CONFIG.AutoBlock, function(state)
+            setAutoBlock(state)
+        end)
 
-ABRight:AddSlider("Punch_Smooth", {
-    Text = "Punch Tracking Smoothness",
-    Min = 1, Max = 100, Rounding = 0, Default = 80,
-    Callback = function(v) CONFIG.AutoPunchAccuracy = v end,
-})
+        createToggle("DEBUG LOG", "Print debug messages", CONFIG.DEBUG, function(v)
+            CONFIG.DEBUG = v
+        end)
 
--- ============================================================
--- BOX SETTINGS TAB
--- ============================================================
-local BoxL = Tabs.Box:AddLeftGroupbox("Size", "maximize")
-local BoxR = Tabs.Box:AddRightGroupbox("Timing & Visuals", "clock")
+        createSection("AUTO PUNCH")
+        createToggle("AUTO PUNCH", "Punch killer after being hit", CONFIG.AutoPunch, function(state)
+            CONFIG.AutoPunch = state
+        end)
 
-BoxL:AddSlider("Box_Width", {
-    Text = "Width",
-    Min = 1, Max = 40, Rounding = 0, Default = CONFIG.HitboxWidth,
-    Callback = function(v) CONFIG.HitboxWidth = v end,
-})
-BoxL:AddSlider("Box_Height", {
-    Text = "Height",
-    Min = 1, Max = 30, Rounding = 0, Default = CONFIG.HitboxHeight,
-    Callback = function(v) CONFIG.HitboxHeight = v end,
-})
-BoxL:AddSlider("Box_Length", {
-    Text = "Length",
-    Min = 1, Max = 40, Rounding = 0, Default = CONFIG.HitboxLength,
-    Callback = function(v) CONFIG.HitboxLength = v end,
-})
-BoxL:AddSlider("Box_Offset", {
-    Text = "Offset",
-    Min = 1, Max = 20, Rounding = 0, Default = 3,
-    Callback = function(v) CONFIG.HitboxDistance = v end,
-})
+        createSlider("PUNCH TRACKING SMOOTHNESS", 1, 100, CONFIG.AutoPunchAccuracy, function(v)
+            CONFIG.AutoPunchAccuracy = v
+        end, 0)
 
-BoxR:AddSlider("Box_Duration", {
-    Text = "Duration",
-    Min = 0.1, Max = 3, Rounding = 2, Suffix = "s", Default = 0.7,
-    Callback = function(v) CONFIG.HitboxDuration = v end,
-})
-BoxR:AddSlider("Box_Life", {
-    Text = "Life",
-    Min = 0.1, Max = 3, Rounding = 2, Suffix = "s", Default = 0.5,
-    Callback = function(v) CONFIG.HitboxLifetime = v end,
-})
-BoxR:AddToggle("Box_Visual", {
-    Text = "Show Box Visual",
-    Default = true,
-    Callback = function(v) CONFIG.ShowHitboxVisual = v end,
-})
-BoxR:AddToggle("Box_Outline", {
-    Text = "Show Outline",
-    Default = true,
-    Callback = function(v) CONFIG.ShowOutline = v end,
-})
-BoxR:AddSlider("Box_Trans", {
-    Text = "Box Transparency",
-    Min = 0, Max = 1, Rounding = 2, Default = 0.8,
-    Callback = function(v) CONFIG.HitboxTransparency = v end,
-})
-BoxR:AddSlider("Outline_Trans", {
-    Text = "Outline Transparency",
-    Min = 0, Max = 1, Rounding = 2, Default = 0.6,
-    Callback = function(v) CONFIG.OutlineTransparencyValue = v end,
-})
+    elseif tab == "BOX" then
 
--- ============================================================
--- HDT TAB
--- ============================================================
-local HDTBox = Tabs.HDT:AddLeftGroupbox("Hitbox Dragging Tech", "cpu")
+        createSection("SIZE")
+        createSlider("WIDTH", 1, 40, CONFIG.HitboxWidth, function(v) CONFIG.HitboxWidth = v end, 0)
+        createSlider("HEIGHT", 1, 30, CONFIG.HitboxHeight, function(v) CONFIG.HitboxHeight = v end, 0)
+        createSlider("LENGTH", 1, 40, CONFIG.HitboxLength, function(v) CONFIG.HitboxLength = v end, 0)
+        createSlider("OFFSET", 1, 20, CONFIG.HitboxDistance, function(v) CONFIG.HitboxDistance = v end, 0)
 
-HDTBox:AddToggle("HDT_Toggle", {
-    Text = "Hitbox Dragging Tech",
-    Default = false,
-    Callback = function(v) hitboxDraggingTech = v end,
-})
-HDTBox:AddSlider("HDT_Speed", {
-    Text = "HDT Speed",
-    Min = 1, Max = 30, Rounding = 0, Default = 6,
-    Callback = function(v) HDT_SPEED = v end,
-})
-HDTBox:AddSlider("HDT_Delay", {
-    Text = "HDT Delay",
-    Min = 0, Max = 2, Rounding = 1, Suffix = "s", Default = 0,
-    Callback = function(v) HDT_DELAY = v end,
-})
+        createSection("TIMING")
+        createSlider("DURATION (s)", 0.1, 3, CONFIG.HitboxDuration, function(v) CONFIG.HitboxDuration = v end, 2)
+        createSlider("LIFE (s)", 0.1, 3, CONFIG.HitboxLifetime, function(v) CONFIG.HitboxLifetime = v end, 2)
+
+        createSection("VISUALS")
+        createToggle("SHOW BOX VISUAL", "Display the box in 3D space", CONFIG.ShowHitboxVisual, function(v)
+            CONFIG.ShowHitboxVisual = v
+        end)
+
+        createToggle("SHOW OUTLINE", "Display box outline", CONFIG.ShowOutline, function(v)
+            CONFIG.ShowOutline = v
+        end)
+
+        createSlider("BOX TRANSPARENCY", 0, 1, CONFIG.HitboxTransparency, function(v)
+            CONFIG.HitboxTransparency = v
+        end, 2)
+
+        createSlider("OUTLINE TRANSPARENCY", 0, 1, CONFIG.OutlineTransparencyValue, function(v)
+            CONFIG.OutlineTransparencyValue = v
+        end, 2)
+
+    elseif tab == "HDT" then
+
+        createSection("HITBOX DRAGGING TECH")
+        createToggle("HDT", "Pull yourself behind the killer", hitboxDraggingTech, function(v)
+            hitboxDraggingTech = v
+        end)
+
+        createSlider("HDT SPEED", 1, 30, HDT_SPEED, function(v) HDT_SPEED = v end, 0)
+        createSlider("HDT DELAY (s)", 0, 2, HDT_DELAY, function(v) HDT_DELAY = v end, 1)
+
+    elseif tab == "BACKSTAB" then
+
+        createSection("ACTIVATION")
+        createToggle("ENABLE BACKSTAB", "Auto-teleport behind killer on stab", BS_CFG.Enabled, function(v)
+            BS_CFG.Enabled = v
+        end)
+
+        createButton("ACTIVATE STAB NOW (H)", function()
+            _G.C00lsakenBackstab()
+        end, C.Red)
+
+        createSection("POSITIONING")
+        createSlider("BEHIND OFFSET", 0.5, 6, BS_CFG.BehindOffset, function(v)
+            BS_CFG.BehindOffset = v
+        end, 1)
+
+        createSlider("MAX RANGE", 10, 150, BS_CFG.MaxRange, function(v)
+            BS_CFG.MaxRange = v
+        end, 0)
+
+        createSection("TIMING")
+        createSlider("STAB COOLDOWN (s)", 0.1, 2, BS_CFG.Cooldown, function(v)
+            BS_CFG.Cooldown = v
+        end, 2)
+
+        createSlider("FOLLOW DURATION (s)", 0.1, 2, BS_CFG.FollowDuration, function(v)
+            BS_CFG.FollowDuration = v
+        end, 2)
+
+        createSlider("TELEPORT DELAY (s)", 0.01, 0.2, BS_CFG.TeleportDelay, function(v)
+            BS_CFG.TeleportDelay = v
+        end, 2)
+
+        createSection("INFO")
+        createInfo("BEHAVIOR", "Teleports behind killer and follows briefly, then releases.")
+    end
+
+    Content.CanvasPosition = Vector2.new(0, 0)
+end
 
 -- ============================================================
--- BACKSTAB TAB (HunterStab)
+-- NAVIGATION
 -- ============================================================
-local BSLeft  = Tabs.Backstab:AddLeftGroupbox("Activation", "play")
-local BSRight = Tabs.Backstab:AddRightGroupbox("Positioning", "move")
-local BSBotL  = Tabs.Backstab:AddLeftGroupbox("Timing", "clock")
-local BSBotR  = Tabs.Backstab:AddRightGroupbox("Info", "info")
+local function updateNavigation()
+    for tab, nav in pairs(TabButtons) do
+        local selected = tab == CurrentTab
+        nav.BackgroundColor3 = selected and C.Yellow or C.Panel2
+        nav.TextColor3 = selected and C.Black or C.Grey
+    end
+end
 
-BSLeft:AddToggle("HS_Enable", {
-    Text = "Enable HunterStab",
-    Default = false,
-    Callback = function(v) HS_CFG.Enabled = v end,
-})
-BSLeft:AddButton("HS_Manual", {
-    Text = "Activate Stab Now (H)",
-    Callback = function() _G.C00lsakenHunterStab() end,
-})
+for _, tab in ipairs(Tabs) do
+    local nav = makeButton(NavContainer, "  " .. tab, UDim2.new(1, 0, 0, 38), UDim2.new())
+    nav.TextXAlignment = Enum.TextXAlignment.Left
+    TabButtons[tab] = nav
 
-BSRight:AddSlider("HS_Behind", {
-    Text = "Behind Offset (studs)",
-    Min = 0.5, Max = 6, Rounding = 1, Default = 2,
-    Callback = function(v) HS_CFG.BehindOffset = v end,
-})
-BSRight:AddSlider("HS_Range", {
-    Text = "Max Range (studs)",
-    Min = 10, Max = 150, Rounding = 0, Default = 60,
-    Callback = function(v) HS_CFG.MaxRange = v end,
-})
-
-BSBotL:AddSlider("HS_Cooldown", {
-    Text = "Stab Cooldown",
-    Min = 0.1, Max = 2, Rounding = 2, Suffix = "s", Default = 0.5,
-    Callback = function(v) HS_CFG.Cooldown = v end,
-})
-BSBotL:AddSlider("HS_Follow", {
-    Text = "Follow Duration",
-    Min = 0.1, Max = 2, Rounding = 2, Suffix = "s", Default = 0.5,
-    Callback = function(v) HS_CFG.FollowDuration = v end,
-})
-BSBotL:AddSlider("HS_TeleportDelay", {
-    Text = "Teleport Delay",
-    Min = 0.01, Max = 0.2, Rounding = 2, Suffix = "s", Default = 0.02,
-    Callback = function(v) HS_CFG.TeleportDelay = v end,
-})
-
-BSBotR:AddLabel("Teleports behind killer + follows briefly.", true)
-BSBotR:AddLabel("Releases automatically after Follow Duration.", true)
+    nav.Activated:Connect(function()
+        loadTab(tab)
+        updateNavigation()
+        notify(tab .. " OPENED")
+    end)
+end
 
 -- ============================================================
--- SAVE & CONFIG TAB
+-- DRAGGING
 -- ============================================================
-SaveManager:SetLibrary(Library)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({"MenuKeybind"})
-SaveManager:SetFolder("c00lsaken")
-SaveManager:SetSubFolder(tostring(game.PlaceId))
+local dragging = false
+local dragStart
+local startPosition
 
-ThemeManager:ApplyToTab(Tabs.Config)
-SaveManager:BuildConfigSection(Tabs.Config)
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPosition = Main.Position
+    end
+end)
 
-local MenuBox = Tabs.Config:AddLeftGroupbox("Menu", "settings")
-MenuBox:AddLabel("Menu toggle key"):AddKeyPicker("MenuKeybind", {
-    Default = "RightShift",
-    NoUI = true,
-    Text = "Menu Keybind",
-})
-Library.ToggleKeybind = Options.MenuKeybind
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(
+            startPosition.X.Scale, startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+        )
+    end
+end)
 
-SaveManager:LoadAutoloadConfig()
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
 
-print("[c00lsaken] Loaded.")
+-- ============================================================
+-- REOPEN BUTTON
+-- ============================================================
+local Reopen = makeButton(Gui, "CS", UDim2.fromOffset(48, 48), UDim2.new(0, 15, 1, -65))
+Reopen.BackgroundColor3 = C.Yellow
+Reopen.TextColor3 = C.Black
+Reopen.TextSize = 20
+Reopen.Font = Enum.Font.GothamBlack
+Reopen.Visible = false
+outline(Reopen, C.Cyan, 1.5)
+
+-- ============================================================
+-- OPEN / CLOSE
+-- ============================================================
+local isOpen = true
+
+local function closeHUD()
+    if not isOpen then return end
+    isOpen = false
+    Background.Visible = false
+    Main.Visible = false
+    Notification.Visible = false
+    Reopen.Visible = true
+end
+
+local function openHUD()
+    if isOpen then return end
+    isOpen = true
+    Background.Visible = true
+    Main.Visible = true
+    Main.Size = UDim2.fromOffset(0, 0)
+    tween(Main, { Size = UDim2.fromOffset(760, 500) }, 0.3)
+    Reopen.Visible = false
+end
+
+Close.Activated:Connect(closeHUD)
+Reopen.Activated:Connect(openHUD)
+
+-- ============================================================
+-- ANIMATION
+-- ============================================================
+local animationSpeed = 5
+
+RunService.RenderStepped:Connect(function()
+    if not Gui.Parent then return end
+    if not isOpen then return end
+
+    if Scanline.Visible then
+        local y = (os.clock() * animationSpeed * 0.08) % 1
+        Scanline.Position = UDim2.new(0, 0, y, 0)
+    end
+
+    local pulse = (math.sin(os.clock() * animationSpeed) + 1) / 2
+    if MainStroke.Enabled then
+        MainStroke.Color = C.Yellow:Lerp(C.Cyan, pulse * 0.35)
+    end
+end)
+
+-- ============================================================
+-- INIT
+-- ============================================================
+loadTab("OVERVIEW")
+updateNavigation()
+
+Main.Size = UDim2.fromOffset(0, 0)
+task.wait(0.1)
+tween(Main, { Size = UDim2.fromOffset(760, 500) }, 0.5)
+
+task.delay(0.6, function()
+    if isOpen then
+        notify("WELCOME, " .. LocalPlayer.DisplayName:upper())
+    end
+end)
+
+print("[c00lsaken 2077] Loaded.")
