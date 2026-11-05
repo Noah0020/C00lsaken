@@ -511,333 +511,177 @@ if LocalPlayer.Character then SetupPunch(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(SetupPunch)
 
 -- ============================================================
--- BACKSTAB SYSTEM
+-- BACKSTAB SYSTEM (HunterStab)
 -- ============================================================
-local BS_CFG = {
-    NormalEnabled   = false,
-    DashstabEnabled = false,
-    BehindStuds     = 4,
-    StartDelay      = 0.05,
-    DashStartDelay  = 0.1,
-    Duration        = 0.2,
-    AutoStuds       = false,
-    StandStuds      = 5.5,
-    RunStuds        = 3.4,
-    DetectPing      = false,
-    DistCheck       = false,
-    DistCheckStuds  = 7,
-    MoreDirect      = false,
-    Cooldown        = 0.5,
+local HS_CFG = {
+    Enabled        = false,
+    BehindOffset   = 2,
+    MaxRange       = 60,
+    Cooldown       = 0.5,
+    TeleportDelay  = 0.02,
+    FollowDuration = 0.5,
 }
 
-local BS_NORMAL_STAB_IDS = {
+local HS_lastStab        = 0
+local HS_stabbing        = false
+local HS_lerpConn        = nil
+local HS_originalAutoRot = true
+
+local HS_DAGGER_ANIM_IDS = {
     ["100725497418533"] = true,
-    ["106086955212611"] = true,
-}
-
-local BS_CROUCH_STAB_IDS = {
     ["89448354637442"]  = true,
-    ["107640065977686"] = true,
 }
 
-local BS_doitmate      = false
-local BS_moredirectrn  = false
-local BS_moredirectend = false
-local BS_running       = false
-local BS_lastStab      = 0
-local BS_speedValue    = nil
-
-local BS_NetworkModule        = nil
-local BS_CharacterReplication = nil
-
-task.spawn(function()
-    local okN, mod = pcall(function()
-        return require(ReplicatedStorage:WaitForChild("Modules", 10):WaitForChild("Network", 5):WaitForChild("Network", 5))
-    end)
-    if okN and mod then BS_NetworkModule = mod end
-
-    local okC, mod2 = pcall(function()
-        return require(ReplicatedStorage:WaitForChild("Systems", 10):WaitForChild("Player", 5):WaitForChild("Game", 5):WaitForChild("CharacterReplication", 5))
-    end)
-    if okC and mod2 then BS_CharacterReplication = mod2 end
-end)
-
-local function bsGetKillerFolder()
+local function hsGetKillerFolder()
     local p = Workspace:FindFirstChild("Players")
     return p and p:FindFirstChild("Killers")
 end
 
-local function bsGetFirstValidKiller()
-    local folder = bsGetKillerFolder()
-    if not folder then return nil end
-    for _, inst in ipairs(folder:GetChildren()) do
-        if inst:IsA("Model") then
-            local hum = inst:FindFirstChildOfClass("Humanoid")
-            local hrp = inst:FindFirstChild("HumanoidRootPart")
-            if hum and hrp and hum.Health > 0 then
-                return inst
+local function hsGetKHRP(model)
+    if not model then return nil end
+    return model:FindFirstChild("HumanoidRootPart")
+        or model.PrimaryPart
+        or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function hsGetMyHRP()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function hsGetMyHum()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function hsGetKiller()
+    local f = hsGetKillerFolder()
+    if not f then return nil, nil end
+    for _, k in ipairs(f:GetChildren()) do
+        if k:IsA("Model") then
+            local h = hsGetKHRP(k)
+            local hum = k:FindFirstChildOfClass("Humanoid")
+            if h and hum and hum.Health > 0 then
+                return k, h
             end
         end
     end
-    return nil
+    return nil, nil
 end
 
-local function bsRefreshSpeed()
-    local char = LocalPlayer.Character
-    if not char then BS_speedValue = nil; return end
-    local sm = char:FindFirstChild("SpeedMultipliers")
-    if not sm then BS_speedValue = nil; return end
-    BS_speedValue = sm:FindFirstChild("Sprinting")
+local function hsIsDagger(track)
+    local a = track and track.Animation
+    if not a then return false end
+    local n = tostring(a.AnimationId):match("%d+")
+    return n and HS_DAGGER_ANIM_IDS[n] == true
 end
 
-local function bsGetPing()
-    local ok, val = pcall(function()
-        return game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
-    end)
-    if ok and val then return val end
-    local ok2, val2 = pcall(function() return LocalPlayer:GetNetworkPing() * 1000 end)
-    if ok2 and val2 then return val2 end
-    return 20
+local function hsStopLerp()
+    if HS_lerpConn then
+        pcall(function() HS_lerpConn:Disconnect() end)
+        HS_lerpConn = nil
+    end
+    local hum = hsGetMyHum()
+    if hum then hum.AutoRotate = HS_originalAutoRot end
+    HS_stabbing = false
 end
 
--- Network hook
-local bsHookInstalled = false
-
-local function bsInstallHook()
-    if bsHookInstalled then return true end
-    if not BS_NetworkModule or not BS_CharacterReplication then return false end
-    if not hookfunction then
-        warn("[c00lsaken] Backstab hook: hookfunction unavailable.")
-        return false
+local function hsFollowBehind(killerModel)
+    if HS_lerpConn then
+        pcall(function() HS_lerpConn:Disconnect() end)
+        HS_lerpConn = nil
     end
 
-    local ok, err = pcall(function()
-        local oldFire
-        oldFire = hookfunction(BS_NetworkModule.FireServerConnection, function(self, connectionName, eventType, ...)
-            local args = {...}
+    local myHum = hsGetMyHum()
+    HS_originalAutoRot = myHum and myHum.AutoRotate or true
+    if myHum then myHum.AutoRotate = false end
 
-            if connectionName == "UpdateCharacterPosition" then
-                local character = LocalPlayer.Character
-                local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                local killerModel = bsGetFirstValidKiller()
+    local endTime = os.clock() + HS_CFG.FollowDuration
 
-                if killerModel and hrp then
-                    local killerHrp = killerModel:FindFirstChild("HumanoidRootPart")
-                    if killerHrp then
-                        local ok2, serialized = pcall(function()
-                            if BS_moredirectrn then
-                                local targetdirect = hrp.CFrame * CFrame.new(0, -90000, 0)
-                                return BS_CharacterReplication.Serialize(targetdirect, hrp.AssemblyLinearVelocity)
-                            elseif BS_moredirectend then
-                                local targetdirectend = hrp.CFrame * CFrame.new(0, 0, 0)
-                                return BS_CharacterReplication.Serialize(targetdirectend, hrp.AssemblyLinearVelocity)
-                            elseif BS_doitmate then
-                                local targetCFrame = killerHrp.CFrame * CFrame.new(0, 0, BS_CFG.BehindStuds)
-                                return BS_CharacterReplication.Serialize(targetCFrame, hrp.AssemblyLinearVelocity)
-                            end
-                            return nil
-                        end)
-
-                        if ok2 and serialized then
-                            args[1] = serialized
-                        end
-                    end
-                end
-            end
-
-            return oldFire(self, connectionName, eventType, unpack(args))
-        end)
-    end)
-
-    if ok then
-        bsHookInstalled = true
-        print("[c00lsaken] Backstab network hook installed.")
-        return true
-    end
-
-    warn("[c00lsaken] Backstab hook install failed: " .. tostring(err))
-    return false
-end
-
-task.spawn(function()
-    local attempts = 0
-    while attempts < 60 do
-        if BS_NetworkModule and BS_CharacterReplication then
-            bsInstallHook()
+    HS_lerpConn = RunService.RenderStepped:Connect(function()
+        if os.clock() >= endTime or not HS_stabbing then
+            hsStopLerp()
             return
         end
-        attempts = attempts + 1
-        task.wait(0.5)
-    end
-    warn("[c00lsaken] Backstab hook: modules never appeared after 30s.")
-end)
 
--- Stab sequence
-local function bsRunSequence(isDashstab)
-    if BS_running then return end
-    BS_running = true
-
-    local startDelay = isDashstab and BS_CFG.DashStartDelay or BS_CFG.StartDelay
-    local mdWait     = isDashstab and 0.001 or 0.01
-
-    local success, err = pcall(function()
-        task.wait(startDelay)
-
-        local character = LocalPlayer.Character
-        if not character then return end
-        local hrp = character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-
-        bsRefreshSpeed()
-        local oldSpeed = BS_speedValue and BS_speedValue.Value
-
-        if BS_CFG.MoreDirect then
-            BS_moredirectrn = true
-            task.wait(mdWait)
-            BS_moredirectrn = false
+        local h = hsGetMyHRP()
+        if not h then
+            hsStopLerp()
+            return
         end
 
-        if BS_speedValue then BS_speedValue.Value = 0 end
-        BS_doitmate = true
-
-        local startTime = os.clock()
-        while os.clock() - startTime < BS_CFG.Duration do
-            if not character.Parent then break end
-            if not (BS_CFG.NormalEnabled or BS_CFG.DashstabEnabled) then break end
-            RunService.RenderStepped:Wait()
+        local kHRP = killerModel and hsGetKHRP(killerModel)
+        if not kHRP or not kHRP.Parent then
+            hsStopLerp()
+            return
         end
 
-        BS_doitmate = false
-        if BS_speedValue and oldSpeed then BS_speedValue.Value = oldSpeed end
+        local kCF = kHRP.CFrame
+        local behindPos = kCF.Position - kCF.LookVector * HS_CFG.BehindOffset
+        local targetCF = CFrame.lookAt(
+            Vector3.new(behindPos.X, h.Position.Y, behindPos.Z),
+            Vector3.new(kCF.Position.X, h.Position.Y, kCF.Position.Z)
+        )
 
-        if BS_CFG.MoreDirect then
-            BS_moredirectrn = true
-            task.wait(mdWait)
-            BS_moredirectend = true
-            BS_moredirectrn = false
-            task.wait(mdWait)
-            BS_moredirectend = false
-        end
-    end)
-
-    BS_doitmate      = false
-    BS_moredirectrn  = false
-    BS_moredirectend = false
-    BS_running       = false
-
-    if not success then
-        warn("[c00lsaken] Backstab sequence error: " .. tostring(err))
-    end
-end
-
--- Trigger
-local function bsOnStabAnimation(isDashstab)
-    if BS_running then return end
-    if isDashstab and not BS_CFG.DashstabEnabled then return end
-    if not isDashstab and not BS_CFG.NormalEnabled then return end
-
-    local now = os.clock()
-    if now - BS_lastStab < BS_CFG.Cooldown then return end
-
-    if BS_CFG.DistCheck then
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        local killer = bsGetFirstValidKiller()
-        local khrp = killer and killer:FindFirstChild("HumanoidRootPart")
-        if not hrp or not khrp then return end
-        if (hrp.Position - khrp.Position).Magnitude > BS_CFG.DistCheckStuds then return end
-    end
-
-    BS_lastStab = now
-    task.spawn(bsRunSequence, isDashstab)
-end
-
-_G.C00lsakenBackstab = function()
-    if BS_CFG.NormalEnabled then
-        bsOnStabAnimation(false)
-    elseif BS_CFG.DashstabEnabled then
-        bsOnStabAnimation(true)
-    else
-        warn("[c00lsaken] Backstab: enable Normal or Dashstab first.")
-    end
-end
-
--- Animation binding
-local bsHookedAnimators = setmetatable({}, {__mode = "k"})
-
-local function bsHookAnimator(animator)
-    if not animator or not animator:IsA("Animator") then return end
-    if bsHookedAnimators[animator] then return end
-    bsHookedAnimators[animator] = true
-
-    animator.AnimationPlayed:Connect(function(track)
-        if not track or not track.Animation then return end
-        local id = tostring(track.Animation.AnimationId):match("%d+")
-        if not id then return end
-
-        if BS_NORMAL_STAB_IDS[id] then
-            bsOnStabAnimation(false)
-        elseif BS_CROUCH_STAB_IDS[id] then
-            bsOnStabAnimation(true)
-        end
+        h.CFrame = h.CFrame:Lerp(targetCF, 0.5)
+        h.AssemblyLinearVelocity = Vector3.zero
     end)
 end
 
--- FIX: SpeedMultipliers folder can be replaced entirely.
--- Weak-keyed set prevents double-hooking the same folder instance.
-local bsHookedSpeedFolders = setmetatable({}, {__mode = "k"})
+local function hsHunterStab()
+    if not HS_CFG.Enabled then return end
+    if HS_stabbing then return end
+    if os.clock() - HS_lastStab < HS_CFG.Cooldown then return end
 
-local function bsHookSpeedMultipliers(sm)
-    if not sm then return end
-    if bsHookedSpeedFolders[sm] then
-        bsRefreshSpeed()
-        return
-    end
-    bsHookedSpeedFolders[sm] = true
+    local myHRP = hsGetMyHRP()
+    if not myHRP then return end
 
-    bsRefreshSpeed()
+    local killer, kHRP = hsGetKiller()
+    if not killer or not kHRP then return end
 
-    sm.ChildAdded:Connect(function(child)
-        if child.Name == "Sprinting" then
-            bsRefreshSpeed()
-        end
-    end)
-    sm.ChildRemoved:Connect(function(child)
-        if child.Name == "Sprinting" then
-            bsRefreshSpeed()
-        end
+    local dist = (kHRP.Position - myHRP.Position).Magnitude
+    if dist > HS_CFG.MaxRange then return end
+
+    HS_stabbing = true
+    HS_lastStab = os.clock()
+
+    local kCF = kHRP.CFrame
+    local behindPos = kCF.Position - kCF.LookVector * HS_CFG.BehindOffset
+    local origin = myHRP.CFrame
+    local behind = CFrame.lookAt(
+        Vector3.new(behindPos.X, origin.Position.Y, behindPos.Z),
+        Vector3.new(kCF.Position.X, origin.Position.Y, kCF.Position.Z)
+    )
+
+    task.wait(HS_CFG.TeleportDelay)
+
+    local now = hsGetMyHRP()
+    if not now then HS_stabbing = false return end
+    now.CFrame = behind
+    now.AssemblyLinearVelocity = Vector3.zero
+
+    hsFollowBehind(killer)
+end
+
+_G.C00lsakenHunterStab = hsHunterStab
+
+-- Animation binding (event-driven, no time cap)
+local hsHookedAnims = setmetatable({}, {__mode = "k"})
+
+local function hsHookAnimator(anim)
+    if not anim or not anim:IsA("Animator") then return end
+    if hsHookedAnims[anim] then return end
+    hsHookedAnims[anim] = true
+
+    anim.AnimationPlayed:Connect(function(t)
+        if not t or not hsIsDagger(t) then return end
+        hsHunterStab()
     end)
 end
 
--- ============================================================
--- FIX: Character binding
---   * SpeedMultipliers folder is re-hooked if the whole folder is replaced
---   * Humanoid binding is event-driven via ChildAdded with no time cap
--- ============================================================
-local function bsBindCharacter(character)
+local function hsBindCharacter(character)
     if not character then return end
 
-    -- SpeedMultipliers — hook now, on late arrival, and on folder replacement
-    local smExisting = character:FindFirstChild("SpeedMultipliers")
-    if smExisting then bsHookSpeedMultipliers(smExisting) end
-
-    character.ChildAdded:Connect(function(child)
-        if child.Name == "SpeedMultipliers" then
-            bsHookSpeedMultipliers(child)
-        end
-    end)
-
-    character.ChildRemoved:Connect(function(child)
-        if child.Name == "SpeedMultipliers" then
-            -- Re-resolve in case a replacement is already present.
-            -- bsRefreshSpeed() sets BS_speedValue to whatever exists now.
-            bsRefreshSpeed()
-            local newSM = character:FindFirstChild("SpeedMultipliers")
-            if newSM then bsHookSpeedMultipliers(newSM) end
-        end
-    end)
-
-    -- Humanoid — event-driven, no fixed time cap
     local humanoidBound = false
 
     local function tryBindHumanoid()
@@ -848,21 +692,19 @@ local function bsBindCharacter(character)
         humanoidBound = true
 
         local anim = hum:FindFirstChildOfClass("Animator")
-        if anim then bsHookAnimator(anim) end
+        if anim then hsHookAnimator(anim) end
 
         hum.ChildAdded:Connect(function(child)
             if child:IsA("Animator") then
-                bsHookAnimator(child)
+                hsHookAnimator(child)
             end
         end)
 
-        bsRefreshSpeed()
         return true
     end
 
     if tryBindHumanoid() then return end
 
-    -- Listen for the Humanoid being added
     local humanoidConn
     humanoidConn = character.ChildAdded:Connect(function(child)
         if child:IsA("Humanoid") then
@@ -872,7 +714,6 @@ local function bsBindCharacter(character)
         end
     end)
 
-    -- Safety poll — runs for as long as the character exists (no 10s cap)
     task.spawn(function()
         while character.Parent do
             if tryBindHumanoid() then
@@ -881,94 +722,21 @@ local function bsBindCharacter(character)
             end
             task.wait(0.2)
         end
-
         if humanoidConn then humanoidConn:Disconnect(); humanoidConn = nil end
     end)
 end
 
-if LocalPlayer.Character then bsBindCharacter(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(bsBindCharacter)
-
--- Auto Studs
-local bsLastKillerModel = nil
-local bsLastKillerPos   = nil
-local bsSmoothedSpeed   = 0
-
-local bsLastSliderValue  = BS_CFG.BehindStuds
-local bsLastSliderUpdate = 0
-local BS_SLIDER_EPSILON  = 0.05
-local BS_SLIDER_INTERVAL = 0.1
-
-RunService.Heartbeat:Connect(function(dt)
-    if not BS_CFG.AutoStuds then
-        bsLastKillerModel = nil
-        bsSmoothedSpeed   = 0
-        return
-    end
-
-    local killer = bsGetFirstValidKiller()
-    if not killer then
-        bsLastKillerModel = nil
-        bsSmoothedSpeed   = 0
-        return
-    end
-
-    local khrp = killer:FindFirstChild("HumanoidRootPart")
-    if not khrp then
-        bsLastKillerModel = nil
-        return
-    end
-
-    local currentPos = khrp.Position
-    local rawSpeed   = 0
-
-    -- FIX: use one sanitised dt for BOTH speed and smoothing so timing is consistent
-    local safeDt = tonumber(dt) or 0
-    if safeDt ~= safeDt or safeDt < 1e-4 or safeDt > 1 then
-        safeDt = 1 / 60
-    end
-
-    if bsLastKillerModel == killer and bsLastKillerPos then
-        local d = Vector3.new(currentPos.X, 0, currentPos.Z)
-                - Vector3.new(bsLastKillerPos.X, 0, bsLastKillerPos.Z)
-        rawSpeed = d.Magnitude / safeDt
-    end
-
-    bsLastKillerModel = killer
-    bsLastKillerPos   = currentPos
-
-    bsSmoothedSpeed = bsSmoothedSpeed + (rawSpeed - bsSmoothedSpeed) * math.min(safeDt * 15, 1)
-    local finalSpeed = math.clamp(bsSmoothedSpeed, 0, 30)
-
-    local studsAtRun = BS_CFG.RunStuds
-    if BS_CFG.DetectPing then
-        local ping = bsGetPing()
-        local clampedPing = math.max(ping, 20)
-        studsAtRun = BS_CFG.RunStuds - ((clampedPing - 20) / 100) * 1.5
-        studsAtRun = math.max(studsAtRun, 1.0)
-    end
-
-    local slope = (BS_CFG.StandStuds - studsAtRun) / 26.0
-    BS_CFG.BehindStuds = BS_CFG.StandStuds - (finalSpeed * slope)
-
-    local now = os.clock()
-    if math.abs(BS_CFG.BehindStuds - bsLastSliderValue) > BS_SLIDER_EPSILON
-       and now - bsLastSliderUpdate > BS_SLIDER_INTERVAL then
-        bsLastSliderValue  = BS_CFG.BehindStuds
-        bsLastSliderUpdate = now
-        pcall(function()
-            if Options and Options.BS_Behind then
-                Options.BS_Behind:Set(BS_CFG.BehindStuds)
-            end
-        end)
-    end
+if LocalPlayer.Character then hsBindCharacter(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(function(c)
+    hsStopLerp()
+    hsBindCharacter(c)
 end)
 
 -- Hotkey H
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     if input.KeyCode == Enum.KeyCode.H then
-        _G.C00lsakenBackstab()
+        hsHunterStab()
     end
 end)
 
@@ -1653,102 +1421,52 @@ HDTBox:AddSlider("HDT_Delay", {
 })
 
 -- ============================================================
--- BACKSTAB TAB
+-- BACKSTAB TAB (HunterStab)
 -- ============================================================
-local BSLeft    = Tabs.Backstab:AddLeftGroupbox("Activation", "play")
-local BSRight   = Tabs.Backstab:AddRightGroupbox("Positioning", "move")
-local BSBotL    = Tabs.Backstab:AddLeftGroupbox("Timing", "clock")
-local BSBotR    = Tabs.Backstab:AddRightGroupbox("Advanced", "settings")
+local BSLeft  = Tabs.Backstab:AddLeftGroupbox("Activation", "play")
+local BSRight = Tabs.Backstab:AddRightGroupbox("Positioning", "move")
+local BSBotL  = Tabs.Backstab:AddLeftGroupbox("Timing", "clock")
+local BSBotR  = Tabs.Backstab:AddRightGroupbox("Info", "info")
 
-BSLeft:AddToggle("BS_Normal", {
-    Text = "Normal Stab",
+BSLeft:AddToggle("HS_Enable", {
+    Text = "Enable HunterStab",
     Default = false,
-    Callback = function(v) BS_CFG.NormalEnabled = v end,
+    Callback = function(v) HS_CFG.Enabled = v end,
 })
-BSLeft:AddToggle("BS_Dash", {
-    Text = "Dash / Crouch Stab",
-    Default = false,
-    Callback = function(v) BS_CFG.DashstabEnabled = v end,
-})
-BSLeft:AddButton("BS_Manual", {
+BSLeft:AddButton("HS_Manual", {
     Text = "Activate Stab Now (H)",
-    Callback = function() _G.C00lsakenBackstab() end,
+    Callback = function() _G.C00lsakenHunterStab() end,
 })
 
-BSRight:AddSlider("BS_Behind", {
-    Text = "Behind Studs",
-    Min = 0.5, Max = 6, Rounding = 1, Default = BS_CFG.BehindStuds,
-    Callback = function(v)
-        if not BS_CFG.AutoStuds then
-            BS_CFG.BehindStuds = v
-            bsLastSliderValue = v
-        end
-    end,
+BSRight:AddSlider("HS_Behind", {
+    Text = "Behind Offset (studs)",
+    Min = 0.5, Max = 6, Rounding = 1, Default = 2,
+    Callback = function(v) HS_CFG.BehindOffset = v end,
 })
-BSRight:AddToggle("BS_AutoStuds", {
-    Text = "Auto Studs",
-    Default = false,
-    Callback = function(v)
-        BS_CFG.AutoStuds = v
-        if not v then
-            local current = Options and Options.BS_Behind and Options.BS_Behind.Value or BS_CFG.BehindStuds
-            BS_CFG.BehindStuds = current
-            bsLastSliderValue  = current
-        end
-    end,
-})
-BSRight:AddSlider("BS_StandStuds", {
-    Text = "Stand Studs",
-    Min = 3, Max = 8, Rounding = 1, Default = BS_CFG.StandStuds,
-    Callback = function(v) BS_CFG.StandStuds = v end,
-})
-BSRight:AddSlider("BS_RunStuds", {
-    Text = "Run Studs",
-    Min = 1, Max = 6, Rounding = 1, Default = BS_CFG.RunStuds,
-    Callback = function(v) BS_CFG.RunStuds = v end,
-})
-BSRight:AddToggle("BS_DetectPing", {
-    Text = "Detect Ping",
-    Default = false,
-    Callback = function(v) BS_CFG.DetectPing = v end,
+BSRight:AddSlider("HS_Range", {
+    Text = "Max Range (studs)",
+    Min = 10, Max = 150, Rounding = 0, Default = 60,
+    Callback = function(v) HS_CFG.MaxRange = v end,
 })
 
-BSBotL:AddSlider("BS_StartDelay", {
-    Text = "Start Delay",
-    Min = 0.01, Max = 0.5, Rounding = 2, Suffix = "s", Default = BS_CFG.StartDelay,
-    Callback = function(v) BS_CFG.StartDelay = v end,
+BSBotL:AddSlider("HS_Cooldown", {
+    Text = "Stab Cooldown",
+    Min = 0.1, Max = 2, Rounding = 2, Suffix = "s", Default = 0.5,
+    Callback = function(v) HS_CFG.Cooldown = v end,
 })
-BSBotL:AddSlider("BS_DashStartDelay", {
-    Text = "Dash Start Delay",
-    Min = 0.01, Max = 0.5, Rounding = 2, Suffix = "s", Default = BS_CFG.DashStartDelay,
-    Callback = function(v) BS_CFG.DashStartDelay = v end,
+BSBotL:AddSlider("HS_Follow", {
+    Text = "Follow Duration",
+    Min = 0.1, Max = 2, Rounding = 2, Suffix = "s", Default = 0.5,
+    Callback = function(v) HS_CFG.FollowDuration = v end,
 })
-BSBotL:AddSlider("BS_Duration", {
-    Text = "Duration",
-    Min = 0.05, Max = 1, Rounding = 2, Suffix = "s", Default = BS_CFG.Duration,
-    Callback = function(v) BS_CFG.Duration = v end,
-})
-BSBotL:AddSlider("BS_Cooldown", {
-    Text = "Cooldown",
-    Min = 0.1, Max = 2, Rounding = 2, Suffix = "s", Default = BS_CFG.Cooldown,
-    Callback = function(v) BS_CFG.Cooldown = v end,
+BSBotL:AddSlider("HS_TeleportDelay", {
+    Text = "Teleport Delay",
+    Min = 0.01, Max = 0.2, Rounding = 2, Suffix = "s", Default = 0.02,
+    Callback = function(v) HS_CFG.TeleportDelay = v end,
 })
 
-BSBotR:AddToggle("BS_MoreDirect", {
-    Text = "More Direct",
-    Default = false,
-    Callback = function(v) BS_CFG.MoreDirect = v end,
-})
-BSBotR:AddToggle("BS_DistCheck", {
-    Text = "Distance Check",
-    Default = false,
-    Callback = function(v) BS_CFG.DistCheck = v end,
-})
-BSBotR:AddSlider("BS_DistCheckStuds", {
-    Text = "Dist Check Studs",
-    Min = 1, Max = 30, Rounding = 0, Default = BS_CFG.DistCheckStuds,
-    Callback = function(v) BS_CFG.DistCheckStuds = v end,
-})
+BSBotR:AddLabel("Teleports behind killer + follows briefly.", true)
+BSBotR:AddLabel("Releases automatically after Follow Duration.", true)
 
 -- ============================================================
 -- SAVE & CONFIG TAB
