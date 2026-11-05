@@ -10,6 +10,8 @@ local Debris            = game:GetService("Debris")
 local Workspace         = game:GetService("Workspace")
 local UserInputService  = game:GetService("UserInputService")
 local TweenService      = game:GetService("TweenService")
+local StarterGui        = game:GetService("StarterGui")
+local Stats             = game:GetService("Stats")
 local LocalPlayer       = Players.LocalPlayer
 local PlayerGui         = LocalPlayer:WaitForChild("PlayerGui")
 
@@ -1096,6 +1098,451 @@ local function disableInfStamina()
 end
 
 -- ============================================================
+-- AIM SYSTEM (HunterAim, optimized)
+-- ============================================================
+local AIM = {
+    Enabled         = false,
+    AimMode         = "Camera",     -- "Camera" | "HRP" | "HRP+Camera"
+    PredictMode     = "Both",       -- "Off" | "Velocity" | "Ping" | "Both"
+    PredictLead     = 0.15,
+    PingMultiplier  = 1.0,
+    Smooth          = 0.35,
+    Debug           = false,
+
+    -- Cached state (updated by background task)
+    MatchActive     = false,
+    PlayingSurvivor = false,
+}
+
+-- Whitelisted abilities only
+local AIM_ANIM_KEYS = {
+    Slash = true,
+    AimGun = true, GunFire = true, GunExplode = true, GunFail = true,
+    Stab = true, LungeStart = true, Lunge = true,
+}
+
+local AIM_SOUND_KEYS = {
+    Slash = true,
+    GunFire = true, GunExplode = true, GunFail = true, Shoot = true,
+    Stab = true, Lunge = true,
+}
+
+local AIM_PING_ABILITIES = {
+    AimGun = true, GunFire = true, GunExplode = true, GunFail = true,
+}
+
+-- Helper functions
+local function aimGetRoot(m)
+    return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)
+end
+
+local function aimGetMyRole()
+    local c = LocalPlayer.Character
+    local p = c and c.Parent
+    if p and (p.Name == "Survivors" or p.Name == "Killers") then return p.Name end
+    return nil
+end
+
+local function aimGetTargetFolder()
+    local players = Workspace:FindFirstChild("Players")
+    if not players then return nil end
+    return players:FindFirstChild("Killers")
+end
+
+local function aimNotify(title, text, dur)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title or "Aim", Text = text or "", Duration = dur or 4,
+        })
+    end)
+end
+
+-- Cached ping (refreshed every 1s)
+local cachedPing = 0
+local function getPingRaw()
+    local ok, v = pcall(function() return LocalPlayer:GetNetworkPing() end)
+    if ok and type(v) == "number" then return v end
+    ok, v = pcall(function()
+        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000
+    end)
+    if ok and type(v) == "number" then return v end
+    return 0
+end
+
+cachedPing = getPingRaw()
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        cachedPing = getPingRaw()
+    end
+end)
+
+-- Asset reading
+local Assets = ReplicatedStorage:FindFirstChild("Assets")
+    or ReplicatedStorage:WaitForChild("Assets", 10)
+
+local aimAnimIds  = {}
+local aimSoundIds = {}
+
+local function pushIdsFromValue(value, intoSet, abilityName)
+    if type(value) == "string" or type(value) == "number" then
+        local id = tostring(value):match("%d+")
+        if id and not intoSet[id] then intoSet[id] = abilityName end
+    elseif type(value) == "table" then
+        for _, v in pairs(value) do
+            pushIdsFromValue(v, intoSet, abilityName)
+        end
+    end
+end
+
+local AIM_SOUND_FIELDS = {
+    "Sounds", "Sound", "SFX", "Sfx", "SoundEffects", "SoundIds",
+}
+
+local function readConfigAnimations(module, charName, skinName)
+    local ok, cfg = pcall(require, module)
+    if not ok or type(cfg) ~= "table" then return end
+
+    if type(cfg.Animations) == "table" then
+        for key, value in pairs(cfg.Animations) do
+            if AIM_ANIM_KEYS[key] then
+                pushIdsFromValue(value, aimAnimIds, key)
+            end
+        end
+    end
+
+    for _, field in ipairs(AIM_SOUND_FIELDS) do
+        local soundTable = cfg[field]
+        if type(soundTable) == "table" then
+            for key, value in pairs(soundTable) do
+                if AIM_SOUND_KEYS[key] then
+                    pushIdsFromValue(value, aimSoundIds, key)
+                end
+            end
+        end
+    end
+end
+
+local function loadMyAbilityIds(char)
+    aimAnimIds  = {}
+    aimSoundIds = {}
+
+    if not Assets then
+        warn("[Aim] ReplicatedStorage.Assets not found")
+        return
+    end
+
+    local charName = char:GetAttribute("CharacterName") or char.Name
+    local skinName = char:GetAttribute("SkinName") or "Default"
+
+    local survivorsFolder = Assets:FindFirstChild("Survivors")
+    local survivorFolder  = survivorsFolder and survivorsFolder:FindFirstChild(charName)
+    if survivorFolder then
+        local baseCfg = survivorFolder:FindFirstChild("Config")
+        if baseCfg then
+            readConfigAnimations(baseCfg, charName, "Default")
+        end
+    end
+
+    if skinName and skinName ~= "Default" then
+        local skinsRoot  = Assets:FindFirstChild("Skins")
+        local skinsSurv  = skinsRoot and skinsRoot:FindFirstChild("Survivors")
+        local skinChar   = skinsSurv and skinsSurv:FindFirstChild(charName)
+        local skinFolder = skinChar and skinChar:FindFirstChild("SkinName" and skinName)
+        if skinFolder then
+            local skinCfg = skinFolder:FindFirstChild("Config")
+            if skinCfg then
+                readConfigAnimations(skinCfg, charName, skinName)
+            end
+        end
+    end
+end
+
+-- Event gate
+local aimEventActive    = false
+local aimEventRefCount  = 0
+local aimCurrentAbility = nil
+
+local function pushEvent(name)
+    aimEventRefCount += 1
+    aimEventActive = true
+    aimCurrentAbility = name
+    if AIM.Debug then
+        print(string.format("[Aim] event start (%d) name=%s", aimEventRefCount, tostring(name)))
+    end
+end
+
+local function popEvent()
+    aimEventRefCount = math.max(0, aimEventRefCount - 1)
+    if aimEventRefCount == 0 then
+        aimEventActive = false
+        aimCurrentAbility = nil
+        if AIM.Debug then
+            print("[Aim] event end")
+        end
+    end
+end
+
+local function isPingAbility(name)
+    return name and AIM_PING_ABILITIES[name] == true
+end
+
+-- Anim + sound watchers
+local aimAnimConn = nil
+local aimSoundConns = {}
+
+local function attachAnimWatcher(char)
+    if aimAnimConn then
+        pcall(function() aimAnimConn:Disconnect() end)
+        aimAnimConn = nil
+    end
+
+    local hum = char:WaitForChild("Humanoid", 5)
+    if not hum then return end
+    local animator = hum:WaitForChild("Animator", 5)
+    if not animator then return end
+
+    aimAnimConn = animator.AnimationPlayed:Connect(function(track)
+        local anim = track.Animation
+        if not anim then return end
+        local animId = tostring(anim.AnimationId):match("%d+")
+        if not animId then return end
+
+        local abilityName = aimAnimIds[animId]
+        if not abilityName then return end
+
+        pushEvent(abilityName)
+
+        local ended = false
+        local function finish()
+            if ended then return end
+            ended = true
+            popEvent()
+        end
+        track.Stopped:Once(finish)
+        local dur = track.Length
+        if not dur or dur <= 0 then dur = 0.5 end
+        task.delay(dur + 0.2, finish)
+    end)
+end
+
+local function soundIdOf(sound)
+    if not sound or not sound.SoundId then return nil end
+    return tostring(sound.SoundId):match("%d+")
+end
+
+local function hookMySound(s)
+    if not s:IsA("Sound") then return end
+    return s.Playing:Connect(function()
+        local sid = soundIdOf(s)
+        if not sid then return end
+        local abilityName = aimSoundIds[sid]
+        if not abilityName then return end
+        pushEvent(abilityName)
+        local dur = s.TimeLength
+        if not dur or dur <= 0 then dur = 0.4 end
+        task.delay(dur + 0.15, popEvent)
+    end)
+end
+
+local function attachSoundWatcher(char)
+    for _, c in ipairs(aimSoundConns) do
+        pcall(function() c:Disconnect() end)
+    end
+    aimSoundConns = {}
+
+    for _, s in ipairs(char:GetDescendants()) do
+        if s:IsA("Sound") then
+            local c = hookMySound(s)
+            if c then table.insert(aimSoundConns, c) end
+        end
+    end
+    table.insert(aimSoundConns, char.DescendantAdded:Connect(function(d)
+        if d:IsA("Sound") then
+            local c = hookMySound(d)
+            if c then table.insert(aimSoundConns, c) end
+        end
+    end))
+end
+
+-- Match detection
+local lastSurvivorAnimTime = 0
+
+local function attachAnimActivity(char)
+    task.wait(0.5)
+    local hum = char:WaitForChild("Humanoid", 5)
+    local anim = hum and hum:WaitForChild("Animator", 5)
+    if not anim then return end
+    anim.AnimationPlayed:Connect(function(track)
+        local p = track.Priority
+        if p == Enum.AnimationPriority.Movement
+           or p == Enum.AnimationPriority.Idle
+           or p == Enum.AnimationPriority.Core then
+            lastSurvivorAnimTime = os.clock()
+        end
+    end)
+end
+
+local function runMatchScan()
+    local myRoot = aimGetRoot(LocalPlayer.Character)
+    local center = myRoot and myRoot.Position or Vector3.new(0, 50, 0)
+    local parts
+    local okq = pcall(function()
+        parts = Workspace:GetPartBoundsInBox(CFrame.new(center), Vector3.new(1000, 2000, 1000))
+    end)
+    if not okq or not parts then return false end
+    for _, part in ipairs(parts) do
+        local model = part:FindFirstAncestorOfClass("Model")
+        if model and model.Parent and model.Parent.Name == "Killers" then
+            return true
+        end
+    end
+    return false
+end
+
+local function isPlayingSurvivor()
+    if aimGetMyRole() ~= "Survivors" then return false end
+    return (os.clock() - lastSurvivorAnimTime) < 3
+end
+
+-- Character attach
+local function aimAttachToCharacter(char)
+    if char ~= LocalPlayer.Character then return end
+
+    local t0 = os.clock()
+    while not char:GetAttribute("CharacterName") and os.clock() - t0 < 3 do
+        task.wait(0.1)
+    end
+
+    loadMyAbilityIds(char)
+    task.spawn(attachAnimWatcher, char)
+    task.spawn(attachSoundWatcher, char)
+    task.spawn(attachAnimActivity, char)
+
+    local n, s = 0, 0
+    for _ in pairs(aimAnimIds)  do n += 1 end
+    for _ in pairs(aimSoundIds) do s += 1 end
+    if n + s > 0 then
+        aimNotify("✓ Aim Ready",
+            string.format("%s — %d anim / %d sound", char.Name, n, s), 4)
+    end
+end
+
+if LocalPlayer.Character then
+    task.spawn(aimAttachToCharacter, LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(function(c)
+    aimEventActive    = false
+    aimEventRefCount  = 0
+    aimCurrentAbility = nil
+    task.wait(0.3)
+    task.spawn(aimAttachToCharacter, c)
+end)
+
+-- Background match/survivor refresh (1s instead of per-frame)
+task.spawn(function()
+    while true do
+        task.wait(1)
+        pcall(function()
+            AIM.MatchActive     = runMatchScan()
+            AIM.PlayingSurvivor = isPlayingSurvivor()
+        end)
+    end
+end)
+
+-- Cached target (nearest killer)
+local aimCachedTargetHRP = nil
+
+local function updateAimTarget()
+    local myRoot = aimGetRoot(LocalPlayer.Character)
+    if not myRoot then aimCachedTargetHRP = nil return end
+    local folder = aimGetTargetFolder()
+    if not folder then aimCachedTargetHRP = nil return end
+    local best, bestD = nil, 500
+    for _, s in ipairs(folder:GetChildren()) do
+        if s:IsA("Model") and s ~= LocalPlayer.Character then
+            local hrp = s:FindFirstChild("HumanoidRootPart")
+            local hum = s:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                local d = (hrp.Position - myRoot.Position).Magnitude
+                if d < bestD then bestD = d; best = hrp end
+            end
+        end
+    end
+    aimCachedTargetHRP = best
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.05)
+        pcall(updateAimTarget)
+    end
+end)
+
+-- Prediction (uses cachedPing, no per-frame ping lookups)
+local function predictHRP(hrp)
+    if not hrp then return nil end
+    if AIM.PredictMode == "Off" then
+        return hrp.Position
+    end
+
+    local vel = hrp.AssemblyLinearVelocity or Vector3.new()
+    if vel.Magnitude > 200 then vel = Vector3.zero end
+
+    local usePing = isPingAbility(aimCurrentAbility)
+
+    local velLead  = 0
+    local pingLead = 0
+
+    if AIM.PredictMode == "Velocity" or AIM.PredictMode == "Both" then
+        velLead = AIM.PredictLead
+    end
+
+    if usePing and (AIM.PredictMode == "Ping" or AIM.PredictMode == "Both") then
+        pingLead = math.clamp(cachedPing * 0.5 * AIM.PingMultiplier, 0, 0.5)
+    end
+
+    local totalLead = math.clamp(velLead + pingLead, 0, 0.75)
+    return hrp.Position + vel * totalLead
+end
+
+local function applyAim(targetPos, mode, smooth)
+    if not targetPos then return end
+    smooth = smooth or AIM.Smooth
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+
+    if mode == "Camera" or mode == "HRP+Camera" then
+        cam.CFrame = cam.CFrame:Lerp(
+            CFrame.lookAt(cam.CFrame.Position, targetPos), smooth)
+    end
+    if mode == "HRP" or mode == "HRP+Camera" then
+        local myRoot = LocalPlayer.Character
+            and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if myRoot then
+            local flat = Vector3.new(targetPos.X, myRoot.Position.Y, targetPos.Z)
+            if (flat - myRoot.Position).Magnitude > 0.1 then
+                myRoot.CFrame = myRoot.CFrame:Lerp(
+                    CFrame.lookAt(myRoot.Position, flat), smooth)
+            end
+        end
+    end
+end
+
+-- The optimized RenderStepped aim loop
+RunService.RenderStepped:Connect(function()
+    if not AIM.Enabled then return end
+    if not AIM.MatchActive then return end
+    if not AIM.PlayingSurvivor then return end
+    if not aimEventActive then return end
+    if not aimCachedTargetHRP or not aimCachedTargetHRP.Parent then return end
+
+    local targetPos = predictHRP(aimCachedTargetHRP)
+    applyAim(targetPos, AIM.AimMode, AIM.Smooth)
+end)
+
+-- ============================================================
 -- CUSTOM CYBERPUNK UI
 -- ============================================================
 local Old = PlayerGui:FindFirstChild("C00LSAKEN2077")
@@ -1510,8 +1957,47 @@ local function createButton(text, callback, color)
     return b
 end
 
+-- Cycle button for multi-choice options
+local function createCycleButton(title, options, getValue, setValue)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 84)
+    card.BackgroundColor3 = C.Panel
+    card.BorderSizePixel = 0
+    card.Parent = Content
+    corner(card, 4)
+    outline(card, Color3.fromRGB(45, 53, 63))
+
+    local t = makeLabel(card, title, 15, C.White, Enum.Font.GothamBold)
+    t.Position = UDim2.fromOffset(14, 9)
+    t.Size = UDim2.new(1, -120, 0, 26)
+
+    local d = makeLabel(card, "Tap to cycle", 12, C.Grey)
+    d.Position = UDim2.fromOffset(14, 41)
+    d.Size = UDim2.new(1, -120, 0, 26)
+
+    local btn = makeButton(card, getValue(), UDim2.fromOffset(120, 32), UDim2.new(1, -134, 0.5, -16))
+    btn.BackgroundColor3 = C.Panel2
+    btn.TextColor3 = C.Yellow
+    btn.TextSize = 14
+
+    btn.Activated:Connect(function()
+        local cur = getValue()
+        local idx = 1
+        for i, opt in ipairs(options) do
+            if opt == cur then idx = i; break end
+        end
+        idx = idx + 1
+        if idx > #options then idx = 1 end
+        local newVal = options[idx]
+        setValue(newVal)
+        btn.Text = newVal
+    end)
+
+    return btn
+end
+
 -- ============================================================
--- CHROME STATUS MONITOR (read-only, no body)
+-- CHROME STATUS MONITOR
 -- ============================================================
 local chromeStatusRefresh
 
@@ -1572,7 +2058,7 @@ local function createChromeStatus()
         end
     end
 
-    local updateEyes = makeStatusRow(46, "OPTICS // EYES", "ESP OFFLINE")
+    local updateEyes = makeStatusRow(46, "OPTICS // EYES", "AIM OFFLINE")
     local updateLungs = makeStatusRow(116, "PULMONARY // LUNGS", "STAMINA MOD OFF")
     local updateArms = makeStatusRow(186, "MOTOR CONTROL // ARMS", "AUTO BLOCK OFF")
     local updateSandevistan = makeStatusRow(256, "SANDEVISTAN", "STANDBY")
@@ -1584,6 +2070,7 @@ local function createChromeStatus()
 
     chromeStatusRefresh = function()
         local espActive = killerESPActive or survivorESPActive or medkitActive or bloxyActive or genESPActive
+        local aimActive = AIM.Enabled
         local staminaModified = infStaminaActive
             or maxStaminaValue ~= initialStaminaValues.MaxStamina
             or sprintSpeedValue ~= initialStaminaValues.SprintSpeed
@@ -1593,7 +2080,7 @@ local function createChromeStatus()
         local autoBlockActive = CONFIG.AutoBlock == true
         local sandevistanReady = BS_CFG.Enabled == true
 
-        updateEyes(espActive, "ESP SYSTEM ONLINE", "ESP OFFLINE")
+        updateEyes(espActive or aimActive, "OPTICS ONLINE", "OPTICS OFFLINE")
         updateLungs(staminaModified, "STAMINA MOD ACTIVE", "STAMINA MOD OFF")
         updateArms(autoBlockActive, "AUTO BLOCK ACTIVE", "AUTO BLOCK OFF")
         updateSandevistan(sandevistanReady, "READY FOR USE", "STANDBY")
@@ -1605,7 +2092,7 @@ end
 -- ============================================================
 -- TABS
 -- ============================================================
-local Tabs = { "OVERVIEW", "CHROME", "ESP", "STAM", "AUTO BLOCK", "BOX", "HDT", "BACKSTAB", "CREDITS" }
+local Tabs = { "OVERVIEW", "CHROME", "AIM", "ESP", "STAM", "AUTO BLOCK", "BOX", "HDT", "BACKSTAB", "CREDITS" }
 local TabButtons = {}
 local CurrentTab = "OVERVIEW"
 
@@ -1617,9 +2104,6 @@ local function clearContent()
     end
 end
 
--- ============================================================
--- FEATURE STATE SNAPSHOTS (for UI rebuild persistence)
--- ============================================================
 local STATE = {
     AutoBlock = false,
     AutoPunch = false,
@@ -1653,6 +2137,46 @@ local function loadTab(tab)
     elseif tab == "CHROME" then
 
         createChromeStatus()
+
+    elseif tab == "AIM" then
+
+        createSection("AIM")
+        createToggle("NORMAL AIM", "Auto-aim during whitelisted abilities", AIM.Enabled, function(v)
+            AIM.Enabled = v
+        end)
+
+        createSection("MODE")
+        createCycleButton("AIM MODE", { "Camera", "HRP", "HRP+Camera" },
+            function() return AIM.AimMode end,
+            function(v) AIM.AimMode = v end)
+
+        createSection("PREDICTION")
+        createCycleButton("PREDICT MODE", { "Off", "Velocity", "Ping", "Both" },
+            function() return AIM.PredictMode end,
+            function(v) AIM.PredictMode = v end)
+
+        createSlider("PREDICT LEAD", 0, 0.5, AIM.PredictLead, function(v)
+            AIM.PredictLead = v
+        end, 2)
+
+        createSlider("PING MULTIPLIER", 0, 3, AIM.PingMultiplier, function(v)
+            AIM.PingMultiplier = v
+        end, 2)
+
+        createSection("TUNING")
+        createSlider("SMOOTH", 0.05, 1, AIM.Smooth, function(v)
+            AIM.Smooth = v
+        end, 2)
+
+        createToggle("DEBUG", "Print aim debug messages", AIM.Debug, function(v)
+            AIM.Debug = v
+        end)
+
+        createSection("INFO")
+        createInfo("WHITELISTED ABILITIES",
+            "Shedletsky Slash  •  Chance Shoot (AimGun/GunFire/GunExplode/GunFail)  •  Two Time Stab/Lunge")
+        createInfo("PREDICTION",
+            "Ping lead applies only to Chance (ranged). Shed + Two Time use velocity lead only.")
 
     elseif tab == "ESP" then
 
@@ -1877,7 +2401,7 @@ for _, tab in ipairs(Tabs) do
 end
 
 -- ============================================================
--- DRAGGING (main window header)
+-- DRAGGING
 -- ============================================================
 local dragging = false
 local dragStart
@@ -2012,7 +2536,6 @@ end)
 loadTab("OVERVIEW")
 updateNavigation()
 
--- Refresh the CHROME readout periodically while its tab is open.
 task.spawn(function()
     while Gui.Parent do
         if CurrentTab == "CHROME" and chromeStatusRefresh then
