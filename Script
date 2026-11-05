@@ -511,7 +511,7 @@ if LocalPlayer.Character then SetupPunch(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(SetupPunch)
 
 -- ============================================================
--- BACKSTAB SYSTEM (merged from auto backstab v4 + HunterStab)
+-- BACKSTAB SYSTEM
 -- ============================================================
 local BS_CFG = {
     NormalEnabled   = false,
@@ -547,7 +547,7 @@ local BS_running       = false
 local BS_lastStab      = 0
 local BS_speedValue    = nil
 
-local BS_NetworkModule       = nil
+local BS_NetworkModule        = nil
 local BS_CharacterReplication = nil
 
 task.spawn(function()
@@ -783,27 +783,81 @@ local function bsHookAnimator(animator)
     end)
 end
 
-local function bsBindCharacter(character)
-    if not character then return end
-    local hum = character:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
+-- Hook SpeedMultipliers' children so a late-added Sprinting value is picked up
+local function bsHookSpeedMultipliers(sm)
+    if not sm then return end
+    bsRefreshSpeed()
 
-    local anim = hum:FindFirstChildOfClass("Animator")
-    if anim then bsHookAnimator(anim) end
-
-    hum.ChildAdded:Connect(function(child)
-        if child:IsA("Animator") then
-            bsHookAnimator(child)
-        end
-    end)
-
-    character.ChildAdded:Connect(function(child)
-        if child.Name == "SpeedMultipliers" then
+    sm.ChildAdded:Connect(function(child)
+        if child.Name == "Sprinting" then
             bsRefreshSpeed()
         end
     end)
+    sm.ChildRemoved:Connect(function(child)
+        if child.Name == "Sprinting" then
+            bsRefreshSpeed()
+        end
+    end)
+end
 
-    bsRefreshSpeed()
+-- ============================================================
+-- FIX: Character binding no longer gives up if Humanoid is late.
+--  - SpeedMultipliers is hooked immediately (independent of Humanoid)
+--  - Humanoid/Animator are polled until they appear (bounded)
+-- ============================================================
+local function bsBindCharacter(character)
+    if not character then return end
+
+    -- 1. SpeedMultipliers — hook right away and on late arrival
+    local smExisting = character:FindFirstChild("SpeedMultipliers")
+    if smExisting then bsHookSpeedMultipliers(smExisting) end
+
+    character.ChildAdded:Connect(function(child)
+        if child.Name == "SpeedMultipliers" then
+            bsHookSpeedMultipliers(child)
+        end
+    end)
+
+    -- 2. Humanoid + Animator — may arrive after CharacterAdded fires
+    local humanoidBound = false
+
+    local function tryBindHumanoid()
+        if humanoidBound then return true end
+
+        local hum = character:FindFirstChildOfClass("Humanoid")
+        if not hum then return false end
+
+        humanoidBound = true
+
+        local anim = hum:FindFirstChildOfClass("Animator")
+        if anim then bsHookAnimator(anim) end
+
+        hum.ChildAdded:Connect(function(child)
+            if child:IsA("Animator") then
+                bsHookAnimator(child)
+            end
+        end)
+
+        bsRefreshSpeed()
+        return true
+    end
+
+    -- Try immediately
+    if tryBindHumanoid() then return end
+
+    -- Poll until Humanoid appears (bounded to ~10s), also abort if character despawns
+    task.spawn(function()
+        local attempts = 0
+        while character.Parent and attempts < 100 do
+            if tryBindHumanoid() then return end
+            attempts = attempts + 1
+            task.wait(0.1)
+        end
+
+        if character.Parent and not humanoidBound then
+            warn("[c00lsaken] Backstab: Humanoid never appeared on character within 10s.")
+        end
+    end)
 end
 
 if LocalPlayer.Character then bsBindCharacter(LocalPlayer.Character) end
@@ -813,6 +867,11 @@ LocalPlayer.CharacterAdded:Connect(bsBindCharacter)
 local bsLastKillerModel = nil
 local bsLastKillerPos   = nil
 local bsSmoothedSpeed   = 0
+
+local bsLastSliderValue  = BS_CFG.BehindStuds
+local bsLastSliderUpdate = 0
+local BS_SLIDER_EPSILON  = 0.05
+local BS_SLIDER_INTERVAL = 0.1
 
 RunService.Heartbeat:Connect(function(dt)
     if not BS_CFG.AutoStuds then
@@ -837,10 +896,15 @@ RunService.Heartbeat:Connect(function(dt)
     local currentPos = khrp.Position
     local rawSpeed   = 0
 
+    local safeDt = tonumber(dt) or 0
+    if safeDt ~= safeDt or safeDt < 1e-4 or safeDt > 1 then
+        safeDt = 1 / 60
+    end
+
     if bsLastKillerModel == killer and bsLastKillerPos then
         local d = Vector3.new(currentPos.X, 0, currentPos.Z)
                 - Vector3.new(bsLastKillerPos.X, 0, bsLastKillerPos.Z)
-        rawSpeed = d.Magnitude / dt
+        rawSpeed = d.Magnitude / safeDt
     end
 
     bsLastKillerModel = killer
@@ -859,6 +923,18 @@ RunService.Heartbeat:Connect(function(dt)
 
     local slope = (BS_CFG.StandStuds - studsAtRun) / 26.0
     BS_CFG.BehindStuds = BS_CFG.StandStuds - (finalSpeed * slope)
+
+    local now = os.clock()
+    if math.abs(BS_CFG.BehindStuds - bsLastSliderValue) > BS_SLIDER_EPSILON
+       and now - bsLastSliderUpdate > BS_SLIDER_INTERVAL then
+        bsLastSliderValue  = BS_CFG.BehindStuds
+        bsLastSliderUpdate = now
+        pcall(function()
+            if Options and Options.BS_Behind then
+                Options.BS_Behind:Set(BS_CFG.BehindStuds)
+            end
+        end)
+    end
 end)
 
 -- Hotkey H
@@ -1576,13 +1652,23 @@ BSRight:AddSlider("BS_Behind", {
     Text = "Behind Studs",
     Min = 0.5, Max = 6, Rounding = 1, Default = BS_CFG.BehindStuds,
     Callback = function(v)
-        if not BS_CFG.AutoStuds then BS_CFG.BehindStuds = v end
+        if not BS_CFG.AutoStuds then
+            BS_CFG.BehindStuds = v
+            bsLastSliderValue = v
+        end
     end,
 })
 BSRight:AddToggle("BS_AutoStuds", {
     Text = "Auto Studs",
     Default = false,
-    Callback = function(v) BS_CFG.AutoStuds = v end,
+    Callback = function(v)
+        BS_CFG.AutoStuds = v
+        if not v then
+            local current = Options and Options.BS_Behind and Options.BS_Behind.Value or BS_CFG.BehindStuds
+            BS_CFG.BehindStuds = current
+            bsLastSliderValue  = current
+        end
+    end,
 })
 BSRight:AddSlider("BS_StandStuds", {
     Text = "Stand Studs",
