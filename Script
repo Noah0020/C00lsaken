@@ -136,14 +136,14 @@ local function isBlockPayload(payload)
 end
 
 -- ============================================================
--- FIRE BLOCK
+-- FIRE BLOCK (fixed — firesignal-only path, remote fallback)
 -- ============================================================
 local function fireBlock()
     local ui = getMainUI()
     local abilityContainer = ui and ui:FindFirstChild("AbilityContainer")
     local blockBtn = abilityContainer and abilityContainer:FindFirstChild("Block")
 
-    if blockBtn then
+    if blockBtn and firesignal then
         local clickBtn =
             blockBtn:FindFirstChildOfClass("ImageButton")
             or blockBtn:FindFirstChildOfClass("TextButton")
@@ -153,32 +153,28 @@ local function fireBlock()
             clickBtn:IsA("ImageButton")
             or clickBtn:IsA("TextButton")
         ) then
+            -- Try each firesignal until one succeeds. If all fail, fall through
+            -- to the remote path instead of returning true for nothing.
             local fired = false
 
-            if firesignal then
-                pcall(function()
-                    firesignal(clickBtn.MouseButton1Click)
-                    firesignal(clickBtn.MouseButton1Down)
-                    firesignal(clickBtn.MouseButton1Up)
-                    fired = true
-                end)
-            end
-
+            pcall(function() firesignal(clickBtn.MouseButton1Click); fired = true end)
             if not fired then
-                pcall(function()
-                    clickBtn.MouseButton1Click:Fire()
-                    clickBtn.MouseButton1Down:Fire()
-                end)
+                pcall(function() firesignal(clickBtn.MouseButton1Down); fired = true end)
+            end
+            if not fired then
+                pcall(function() firesignal(clickBtn.MouseButton1Up); fired = true end)
             end
 
-            if triggerHDTFromBlock then
-                triggerHDTFromBlock()
+            if fired then
+                if triggerHDTFromBlock then
+                    triggerHDTFromBlock()
+                end
+                return true
             end
-
-            return true
         end
     end
 
+    -- Remote fallback
     local re = getRemote()
     if not re then return false end
 
@@ -1102,19 +1098,17 @@ end
 -- ============================================================
 local AIM = {
     Enabled         = false,
-    AimMode         = "Camera",     -- "Camera" | "HRP" | "HRP+Camera"
-    PredictMode     = "Both",       -- "Off" | "Velocity" | "Ping" | "Both"
+    AimMode         = "Camera",
+    PredictMode     = "Both",
     PredictLead     = 0.15,
     PingMultiplier  = 1.0,
     Smooth          = 0.35,
     Debug           = false,
 
-    -- Cached state (updated by background task)
     MatchActive     = false,
     PlayingSurvivor = false,
 }
 
--- Whitelisted abilities only
 local AIM_ANIM_KEYS = {
     Slash = true,
     AimGun = true, GunFire = true, GunExplode = true, GunFail = true,
@@ -1131,7 +1125,6 @@ local AIM_PING_ABILITIES = {
     AimGun = true, GunFire = true, GunExplode = true, GunFail = true,
 }
 
--- Helper functions
 local function aimGetRoot(m)
     return m and (m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart)
 end
@@ -1157,15 +1150,15 @@ local function aimNotify(title, text, dur)
     end)
 end
 
--- Cached ping (refreshed every 1s)
+-- Cached ping (refreshed every 1s in the background)
 local cachedPing = 0
 local function getPingRaw()
-    local ok, v = pcall(function() return LocalPlayer:GetNetworkPing() end)
-    if ok and type(v) == "number" then return v end
-    ok, v = pcall(function()
+    local okp, v = pcall(function() return LocalPlayer:GetNetworkPing() end)
+    if okp and type(v) == "number" then return v end
+    okp, v = pcall(function()
         return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000
     end)
-    if ok and type(v) == "number" then return v end
+    if okp and type(v) == "number" then return v end
     return 0
 end
 
@@ -1201,8 +1194,8 @@ local AIM_SOUND_FIELDS = {
 }
 
 local function readConfigAnimations(module, charName, skinName)
-    local ok, cfg = pcall(require, module)
-    if not ok or type(cfg) ~= "table" then return end
+    local okp, cfg = pcall(require, module)
+    if not okp or type(cfg) ~= "table" then return end
 
     if type(cfg.Animations) == "table" then
         for key, value in pairs(cfg.Animations) do
@@ -1249,7 +1242,7 @@ local function loadMyAbilityIds(char)
         local skinsRoot  = Assets:FindFirstChild("Skins")
         local skinsSurv  = skinsRoot and skinsRoot:FindFirstChild("Survivors")
         local skinChar   = skinsSurv and skinsSurv:FindFirstChild(charName)
-        local skinFolder = skinChar and skinChar:FindFirstChild("SkinName" and skinName)
+        local skinFolder = skinChar and skinChar:FindFirstChild(skinName)
         if skinFolder then
             local skinCfg = skinFolder:FindFirstChild("Config")
             if skinCfg then
@@ -1268,9 +1261,6 @@ local function pushEvent(name)
     aimEventRefCount += 1
     aimEventActive = true
     aimCurrentAbility = name
-    if AIM.Debug then
-        print(string.format("[Aim] event start (%d) name=%s", aimEventRefCount, tostring(name)))
-    end
 end
 
 local function popEvent()
@@ -1278,9 +1268,6 @@ local function popEvent()
     if aimEventRefCount == 0 then
         aimEventActive = false
         aimCurrentAbility = nil
-        if AIM.Debug then
-            print("[Aim] event end")
-        end
     end
 end
 
@@ -1288,7 +1275,6 @@ local function isPingAbility(name)
     return name and AIM_PING_ABILITIES[name] == true
 end
 
--- Anim + sound watchers
 local aimAnimConn = nil
 local aimSoundConns = {}
 
@@ -1384,18 +1370,16 @@ local function attachAnimActivity(char)
     end)
 end
 
+-- Optimized match scan: iterate the killers folder instead of a huge box query.
 local function runMatchScan()
-    local myRoot = aimGetRoot(LocalPlayer.Character)
-    local center = myRoot and myRoot.Position or Vector3.new(0, 50, 0)
-    local parts
-    local okq = pcall(function()
-        parts = Workspace:GetPartBoundsInBox(CFrame.new(center), Vector3.new(1000, 2000, 1000))
-    end)
-    if not okq or not parts then return false end
-    for _, part in ipairs(parts) do
-        local model = part:FindFirstAncestorOfClass("Model")
-        if model and model.Parent and model.Parent.Name == "Killers" then
-            return true
+    local folder = aimGetTargetFolder()
+    if not folder then return false end
+    for _, k in ipairs(folder:GetChildren()) do
+        if k:IsA("Model") then
+            local hum = k:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                return true
+            end
         end
     end
     return false
@@ -1406,7 +1390,6 @@ local function isPlayingSurvivor()
     return (os.clock() - lastSurvivorAnimTime) < 3
 end
 
--- Character attach
 local function aimAttachToCharacter(char)
     if char ~= LocalPlayer.Character then return end
 
@@ -1440,18 +1423,23 @@ LocalPlayer.CharacterAdded:Connect(function(c)
     task.spawn(aimAttachToCharacter, c)
 end)
 
--- Background match/survivor refresh (1s instead of per-frame)
+-- Background match / survivor refresh (only while aim is enabled)
 task.spawn(function()
     while true do
         task.wait(1)
-        pcall(function()
-            AIM.MatchActive     = runMatchScan()
-            AIM.PlayingSurvivor = isPlayingSurvivor()
-        end)
+        if AIM.Enabled then
+            pcall(function()
+                AIM.MatchActive     = runMatchScan()
+                AIM.PlayingSurvivor = isPlayingSurvivor()
+            end)
+        else
+            AIM.MatchActive     = false
+            AIM.PlayingSurvivor = false
+        end
     end
 end)
 
--- Cached target (nearest killer)
+-- Cached target
 local aimCachedTargetHRP = nil
 
 local function updateAimTarget()
@@ -1476,11 +1464,14 @@ end
 task.spawn(function()
     while true do
         task.wait(0.05)
-        pcall(updateAimTarget)
+        if AIM.Enabled then
+            pcall(updateAimTarget)
+        else
+            aimCachedTargetHRP = nil
+        end
     end
 end)
 
--- Prediction (uses cachedPing, no per-frame ping lookups)
 local function predictHRP(hrp)
     if not hrp then return nil end
     if AIM.PredictMode == "Off" then
@@ -1530,7 +1521,6 @@ local function applyAim(targetPos, mode, smooth)
     end
 end
 
--- The optimized RenderStepped aim loop
 RunService.RenderStepped:Connect(function()
     if not AIM.Enabled then return end
     if not AIM.MatchActive then return end
@@ -1781,6 +1771,40 @@ local function notify(message)
 end
 
 -- ============================================================
+-- DRAG CLAMPING HELPERS
+-- ============================================================
+local function clampMainPos(newPos)
+    local camera = workspace.CurrentCamera
+    if not camera then return newPos end
+    local vp = camera.ViewportSize
+    local w = Main.AbsoluteSize.X
+    local h = Main.AbsoluteSize.Y
+    if w <= 0 or h <= 0 then return newPos end
+    local halfW, halfH = w * 0.5, h * 0.5
+    local margin = 100
+    local cx = newPos.X.Scale * vp.X + newPos.X.Offset
+    local cy = newPos.Y.Scale * vp.Y + newPos.Y.Offset
+    cx = math.clamp(cx, margin - halfW, vp.X - margin + halfW)
+    cy = math.clamp(cy, margin - halfH, vp.Y - margin + halfH)
+    return UDim2.fromOffset(cx, cy)
+end
+
+local function clampReopenPos(newPos)
+    local camera = workspace.CurrentCamera
+    if not camera then return newPos end
+    local vp = camera.ViewportSize
+    local w = Reopen.AbsoluteSize.X
+    local h = Reopen.AbsoluteSize.Y
+    if w <= 0 or h <= 0 then return newPos end
+    local margin = 40
+    local x = newPos.X.Scale * vp.X + newPos.X.Offset
+    local y = newPos.Y.Scale * vp.Y + newPos.Y.Offset
+    x = math.clamp(x, margin - w, vp.X - margin)
+    y = math.clamp(y, margin - h, vp.Y - margin)
+    return UDim2.fromOffset(x, y)
+end
+
+-- ============================================================
 -- COMPONENTS
 -- ============================================================
 local function createSection(title)
@@ -1901,6 +1925,7 @@ local function createSlider(title, minimum, maximum, default, callback, decimals
     corner(fill, 5)
 
     local dragging = false
+    local activeInput = nil
     local value = default
 
     local function setValue(x)
@@ -1913,21 +1938,24 @@ local function createSlider(title, minimum, maximum, default, callback, decimals
     end
 
     bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
+            activeInput = input
             setValue(input.Position.X)
         end
     end)
 
     local changedConn = UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        if dragging and input == activeInput then
             setValue(input.Position.X)
         end
     end)
 
     local endedConn = UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if input == activeInput then
             dragging = false
+            activeInput = nil
         end
     end)
 
@@ -1943,6 +1971,7 @@ local function createSlider(title, minimum, maximum, default, callback, decimals
             local percent = math.clamp((v - minimum) / (maximum - minimum), 0, 1)
             fill.Size = UDim2.fromScale(percent, 1)
             valueLabel.Text = string.format("%." .. decimals .. "f", v)
+            callback(v) -- now fires the setting callback too
         end
     }
 end
@@ -1957,7 +1986,6 @@ local function createButton(text, callback, color)
     return b
 end
 
--- Cycle button for multi-choice options
 local function createCycleButton(title, options, getValue, setValue)
     local card = Instance.new("Frame")
     card.Size = UDim2.new(1, 0, 0, 84)
@@ -2401,7 +2429,7 @@ for _, tab in ipairs(Tabs) do
 end
 
 -- ============================================================
--- DRAGGING
+-- DRAGGING (main window header, clamped)
 -- ============================================================
 local dragging = false
 local dragStart
@@ -2418,10 +2446,11 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
-        Main.Position = UDim2.new(
+        local proposed = UDim2.new(
             startPosition.X.Scale, startPosition.X.Offset + delta.X,
             startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
         )
+        Main.Position = clampMainPos(proposed)
     end
 end)
 
@@ -2432,7 +2461,7 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 -- ============================================================
--- REOPEN BUTTON (draggable)
+-- REOPEN BUTTON (draggable + clamped)
 -- ============================================================
 local Reopen = makeButton(Gui, "CS", UDim2.fromOffset(60, 60), UDim2.new(0, 18, 1, -80))
 Reopen.BackgroundColor3 = C.Yellow
@@ -2463,12 +2492,13 @@ UserInputService.InputChanged:Connect(function(input)
             reopenDragMoved = true
         end
         if reopenDragMoved then
-            Reopen.Position = UDim2.new(
+            local proposed = UDim2.new(
                 reopenStartPos.X.Scale,
                 reopenStartPos.X.Offset + delta.X,
                 reopenStartPos.Y.Scale,
                 reopenStartPos.Y.Offset + delta.Y
             )
+            Reopen.Position = clampReopenPos(proposed)
         end
     end
 end)
