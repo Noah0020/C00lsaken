@@ -783,9 +783,18 @@ local function bsHookAnimator(animator)
     end)
 end
 
--- Hook SpeedMultipliers' children so a late-added Sprinting value is picked up
+-- FIX: SpeedMultipliers folder can be replaced entirely.
+-- Weak-keyed set prevents double-hooking the same folder instance.
+local bsHookedSpeedFolders = setmetatable({}, {__mode = "k"})
+
 local function bsHookSpeedMultipliers(sm)
     if not sm then return end
+    if bsHookedSpeedFolders[sm] then
+        bsRefreshSpeed()
+        return
+    end
+    bsHookedSpeedFolders[sm] = true
+
     bsRefreshSpeed()
 
     sm.ChildAdded:Connect(function(child)
@@ -801,14 +810,14 @@ local function bsHookSpeedMultipliers(sm)
 end
 
 -- ============================================================
--- FIX: Character binding no longer gives up if Humanoid is late.
---  - SpeedMultipliers is hooked immediately (independent of Humanoid)
---  - Humanoid/Animator are polled until they appear (bounded)
+-- FIX: Character binding
+--   * SpeedMultipliers folder is re-hooked if the whole folder is replaced
+--   * Humanoid binding is event-driven via ChildAdded with no time cap
 -- ============================================================
 local function bsBindCharacter(character)
     if not character then return end
 
-    -- 1. SpeedMultipliers — hook right away and on late arrival
+    -- SpeedMultipliers — hook now, on late arrival, and on folder replacement
     local smExisting = character:FindFirstChild("SpeedMultipliers")
     if smExisting then bsHookSpeedMultipliers(smExisting) end
 
@@ -818,12 +827,21 @@ local function bsBindCharacter(character)
         end
     end)
 
-    -- 2. Humanoid + Animator — may arrive after CharacterAdded fires
+    character.ChildRemoved:Connect(function(child)
+        if child.Name == "SpeedMultipliers" then
+            -- Re-resolve in case a replacement is already present.
+            -- bsRefreshSpeed() sets BS_speedValue to whatever exists now.
+            bsRefreshSpeed()
+            local newSM = character:FindFirstChild("SpeedMultipliers")
+            if newSM then bsHookSpeedMultipliers(newSM) end
+        end
+    end)
+
+    -- Humanoid — event-driven, no fixed time cap
     local humanoidBound = false
 
     local function tryBindHumanoid()
         if humanoidBound then return true end
-
         local hum = character:FindFirstChildOfClass("Humanoid")
         if not hum then return false end
 
@@ -842,21 +860,29 @@ local function bsBindCharacter(character)
         return true
     end
 
-    -- Try immediately
     if tryBindHumanoid() then return end
 
-    -- Poll until Humanoid appears (bounded to ~10s), also abort if character despawns
+    -- Listen for the Humanoid being added
+    local humanoidConn
+    humanoidConn = character.ChildAdded:Connect(function(child)
+        if child:IsA("Humanoid") then
+            if tryBindHumanoid() then
+                if humanoidConn then humanoidConn:Disconnect(); humanoidConn = nil end
+            end
+        end
+    end)
+
+    -- Safety poll — runs for as long as the character exists (no 10s cap)
     task.spawn(function()
-        local attempts = 0
-        while character.Parent and attempts < 100 do
-            if tryBindHumanoid() then return end
-            attempts = attempts + 1
-            task.wait(0.1)
+        while character.Parent do
+            if tryBindHumanoid() then
+                if humanoidConn then humanoidConn:Disconnect(); humanoidConn = nil end
+                return
+            end
+            task.wait(0.2)
         end
 
-        if character.Parent and not humanoidBound then
-            warn("[c00lsaken] Backstab: Humanoid never appeared on character within 10s.")
-        end
+        if humanoidConn then humanoidConn:Disconnect(); humanoidConn = nil end
     end)
 end
 
@@ -896,6 +922,7 @@ RunService.Heartbeat:Connect(function(dt)
     local currentPos = khrp.Position
     local rawSpeed   = 0
 
+    -- FIX: use one sanitised dt for BOTH speed and smoothing so timing is consistent
     local safeDt = tonumber(dt) or 0
     if safeDt ~= safeDt or safeDt < 1e-4 or safeDt > 1 then
         safeDt = 1 / 60
@@ -910,7 +937,7 @@ RunService.Heartbeat:Connect(function(dt)
     bsLastKillerModel = killer
     bsLastKillerPos   = currentPos
 
-    bsSmoothedSpeed = bsSmoothedSpeed + (rawSpeed - bsSmoothedSpeed) * math.min(dt * 15, 1)
+    bsSmoothedSpeed = bsSmoothedSpeed + (rawSpeed - bsSmoothedSpeed) * math.min(safeDt * 15, 1)
     local finalSpeed = math.clamp(bsSmoothedSpeed, 0, 30)
 
     local studsAtRun = BS_CFG.RunStuds
