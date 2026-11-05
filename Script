@@ -1064,8 +1064,6 @@ local staminaGainValue  = (ok and sprintModule and sprintModule.StaminaGain) or 
 local staminaDrainValue = (ok and sprintModule and sprintModule.StaminaDrain) or 1
 local regenDelayValue   = (ok and sprintModule and sprintModule.StaminaRegenDelay) or 0.5
 
--- Baseline values let the CHROME monitor detect slider changes without
--- changing or intercepting the stamina system itself.
 local initialStaminaValues = {
     MaxStamina = maxStaminaValue,
     SprintSpeed = sprintSpeedValue,
@@ -1140,7 +1138,7 @@ local function makeLabel(parent, text, size, color, font)
     local l = Instance.new("TextLabel")
     l.BackgroundTransparency = 1
     l.Text = text
-    l.TextSize = size or 13
+    l.TextSize = size or 15
     l.TextColor3 = color or C.White
     l.Font = font or Enum.Font.GothamMedium
     l.TextXAlignment = Enum.TextXAlignment.Left
@@ -1153,14 +1151,14 @@ local function makeButton(parent, text, size, position)
     local b = Instance.new("TextButton")
     b.AutoButtonColor = false
     b.Text = text
-    b.TextSize = 13
+    b.TextSize = 15
     b.Font = Enum.Font.GothamBold
     b.TextColor3 = C.White
     b.BackgroundColor3 = C.Panel2
     b.Size = size
     b.Position = position
     b.Parent = parent
-    corner(b, 4)
+    corner(b, 5)
     return b
 end
 
@@ -1200,7 +1198,7 @@ local Main = Instance.new("Frame")
 Main.Name = "MainWindow"
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.Position = UDim2.fromScale(0.5, 0.5)
-Main.Size = UDim2.fromOffset(760, 500)
+Main.Size = UDim2.fromOffset(880, 590)
 Main.BackgroundColor3 = C.Black
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
@@ -1216,7 +1214,7 @@ local function updateScale()
     local camera = workspace.CurrentCamera
     if not camera then return end
     local size = camera.ViewportSize
-    Scale.Scale = math.clamp(math.min(size.X / 850, size.Y / 620), 0.55, 1)
+    Scale.Scale = math.clamp(math.min(size.X / 960, size.Y / 700), 0.55, 1)
 end
 
 local viewportConnection
@@ -1233,7 +1231,7 @@ workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(connectCamera)
 connectCamera()
 
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 65)
+Header.Size = UDim2.new(1, 0, 0, 74)
 Header.BackgroundColor3 = Color3.fromRGB(19, 22, 27)
 Header.BorderSizePixel = 0
 Header.Parent = Main
@@ -1245,27 +1243,27 @@ HeaderLine.BackgroundColor3 = C.Yellow
 HeaderLine.BorderSizePixel = 0
 HeaderLine.Parent = Header
 
-local Logo = makeLabel(Header, "C00LSAKEN 2077", 23, C.Yellow, Enum.Font.GothamBlack)
-Logo.Position = UDim2.fromOffset(20, 0)
-Logo.Size = UDim2.new(1, -100, 1, 0)
+local Logo = makeLabel(Header, "C00LSAKEN 2077", 26, C.Yellow, Enum.Font.GothamBlack)
+Logo.Position = UDim2.fromOffset(22, 0)
+Logo.Size = UDim2.new(1, -110, 1, 0)
 
-local Close = makeButton(Header, "X", UDim2.fromOffset(34, 30), UDim2.new(1, -45, 0, 17))
+local Close = makeButton(Header, "X", UDim2.fromOffset(40, 34), UDim2.new(1, -52, 0, 20))
 Close.BackgroundColor3 = C.Red
 
 local Sidebar = Instance.new("Frame")
-Sidebar.Position = UDim2.fromOffset(0, 65)
-Sidebar.Size = UDim2.new(0, 150, 1, -65)
+Sidebar.Position = UDim2.fromOffset(0, 74)
+Sidebar.Size = UDim2.new(0, 175, 1, -74)
 Sidebar.BackgroundColor3 = Color3.fromRGB(12, 15, 19)
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
 
-local SidebarTitle = makeLabel(Sidebar, "MENU", 11, C.Grey, Enum.Font.GothamBold)
-SidebarTitle.Position = UDim2.fromOffset(15, 15)
-SidebarTitle.Size = UDim2.new(1, -20, 0, 25)
+local SidebarTitle = makeLabel(Sidebar, "MENU", 13, C.Grey, Enum.Font.GothamBold)
+SidebarTitle.Position = UDim2.fromOffset(17, 16)
+SidebarTitle.Size = UDim2.new(1, -24, 0, 26)
 
 local NavContainer = Instance.new("ScrollingFrame")
-NavContainer.Position = UDim2.fromOffset(8, 48)
-NavContainer.Size = UDim2.new(1, -16, 1, -60)
+NavContainer.Position = UDim2.fromOffset(9, 52)
+NavContainer.Size = UDim2.new(1, -18, 1, -64)
 NavContainer.BackgroundTransparency = 1
 NavContainer.BorderSizePixel = 0
 NavContainer.ScrollBarThickness = 3
@@ -1275,48 +1273,48 @@ NavContainer.CanvasSize = UDim2.new()
 NavContainer.Parent = Sidebar
 
 local NavLayout = Instance.new("UIListLayout")
-NavLayout.Padding = UDim.new(0, 8)
+NavLayout.Padding = UDim.new(0, 9)
 NavLayout.Parent = NavContainer
 
 local Content = Instance.new("ScrollingFrame")
 Content.Name = "Content"
-Content.Position = UDim2.fromOffset(166, 78)
-Content.Size = UDim2.new(1, -182, 1, -95)
+Content.Position = UDim2.fromOffset(192, 90)
+Content.Size = UDim2.new(1, -210, 1, -108)
 Content.BackgroundTransparency = 1
 Content.BorderSizePixel = 0
-Content.ScrollBarThickness = 3
+Content.ScrollBarThickness = 4
 Content.ScrollBarImageColor3 = C.Yellow
 Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
 Content.CanvasSize = UDim2.new()
 Content.Parent = Main
 
 local ContentLayout = Instance.new("UIListLayout")
-ContentLayout.Padding = UDim.new(0, 12)
+ContentLayout.Padding = UDim.new(0, 14)
 ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = Content
 
 local Padding = Instance.new("UIPadding")
-Padding.PaddingRight = UDim.new(0, 8)
-Padding.PaddingBottom = UDim.new(0, 10)
+Padding.PaddingRight = UDim.new(0, 10)
+Padding.PaddingBottom = UDim.new(0, 12)
 Padding.Parent = Content
 
 local Notification = Instance.new("Frame")
 Notification.AnchorPoint = Vector2.new(1, 0)
-Notification.Position = UDim2.new(1, -15, 0, 15)
-Notification.Size = UDim2.fromOffset(260, 65)
+Notification.Position = UDim2.new(1, -18, 0, 18)
+Notification.Size = UDim2.fromOffset(300, 78)
 Notification.BackgroundColor3 = C.Panel
 Notification.Visible = false
 Notification.Parent = Gui
 corner(Notification, 5)
 outline(Notification, C.Yellow)
 
-local NotificationTitle = makeLabel(Notification, "NOTIFICATION", 11, C.Yellow)
-NotificationTitle.Position = UDim2.fromOffset(12, 7)
-NotificationTitle.Size = UDim2.new(1, -20, 0, 20)
+local NotificationTitle = makeLabel(Notification, "NOTIFICATION", 13, C.Yellow)
+NotificationTitle.Position = UDim2.fromOffset(14, 8)
+NotificationTitle.Size = UDim2.new(1, -22, 0, 22)
 
-local NotificationText = makeLabel(Notification, "", 12, C.White)
-NotificationText.Position = UDim2.fromOffset(12, 30)
-NotificationText.Size = UDim2.new(1, -20, 0, 25)
+local NotificationText = makeLabel(Notification, "", 14, C.White)
+NotificationText.Position = UDim2.fromOffset(14, 36)
+NotificationText.Size = UDim2.new(1, -22, 0, 28)
 
 local notificationId = 0
 local function notify(message)
@@ -1325,11 +1323,11 @@ local function notify(message)
     NotificationText.Text = message
     Notification.Visible = true
     Notification.BackgroundTransparency = 1
-    Notification.Position = UDim2.new(1, 20, 0, 15)
-    tween(Notification, { Position = UDim2.new(1, -15, 0, 15), BackgroundTransparency = 0 })
+    Notification.Position = UDim2.new(1, 22, 0, 18)
+    tween(Notification, { Position = UDim2.new(1, -18, 0, 18), BackgroundTransparency = 0 })
     task.delay(2.5, function()
         if notificationId ~= id then return end
-        tween(Notification, { Position = UDim2.new(1, 20, 0, 15), BackgroundTransparency = 1 })
+        tween(Notification, { Position = UDim2.new(1, 22, 0, 18), BackgroundTransparency = 1 })
         task.wait(0.3)
         if notificationId == id then Notification.Visible = false end
     end)
@@ -1340,63 +1338,63 @@ end
 -- ============================================================
 local function createSection(title)
     local section = Instance.new("Frame")
-    section.Size = UDim2.new(1, 0, 0, 42)
+    section.Size = UDim2.new(1, 0, 0, 48)
     section.BackgroundColor3 = C.Panel2
     section.BorderSizePixel = 0
     section.Parent = Content
     corner(section, 4)
 
     local accent = Instance.new("Frame")
-    accent.Size = UDim2.new(0, 3, 1, 0)
+    accent.Size = UDim2.new(0, 4, 1, 0)
     accent.BackgroundColor3 = C.Yellow
     accent.BorderSizePixel = 0
     accent.Parent = section
 
-    local text = makeLabel(section, title, 13, C.Yellow, Enum.Font.GothamBold)
-    text.Position = UDim2.fromOffset(14, 0)
-    text.Size = UDim2.new(1, -20, 1, 0)
+    local text = makeLabel(section, title, 15, C.Yellow, Enum.Font.GothamBold)
+    text.Position = UDim2.fromOffset(16, 0)
+    text.Size = UDim2.new(1, -22, 1, 0)
     return section
 end
 
 local function createInfo(title, description)
     local card = Instance.new("Frame")
-    card.Size = UDim2.new(1, 0, 0, 76)
+    card.Size = UDim2.new(1, 0, 0, 90)
     card.BackgroundColor3 = C.Panel
     card.BorderSizePixel = 0
     card.Parent = Content
     corner(card, 4)
     outline(card, Color3.fromRGB(45, 53, 63))
 
-    local t = makeLabel(card, title, 13, C.White, Enum.Font.GothamBold)
-    t.Position = UDim2.fromOffset(14, 8)
-    t.Size = UDim2.new(1, -25, 0, 24)
+    local t = makeLabel(card, title, 15, C.White, Enum.Font.GothamBold)
+    t.Position = UDim2.fromOffset(16, 10)
+    t.Size = UDim2.new(1, -28, 0, 26)
 
-    local d = makeLabel(card, description, 11, C.Grey)
-    d.Position = UDim2.fromOffset(14, 35)
-    d.Size = UDim2.new(1, -25, 0, 28)
+    local d = makeLabel(card, description, 13, C.Grey)
+    d.Position = UDim2.fromOffset(16, 42)
+    d.Size = UDim2.new(1, -28, 0, 34)
     d.TextWrapped = true
     return card
 end
 
 local function createToggle(title, description, default, callback)
     local card = Instance.new("Frame")
-    card.Size = UDim2.new(1, 0, 0, 70)
+    card.Size = UDim2.new(1, 0, 0, 84)
     card.BackgroundColor3 = C.Panel
     card.BorderSizePixel = 0
     card.Parent = Content
     corner(card, 4)
     outline(card, Color3.fromRGB(45, 53, 63))
 
-    local t = makeLabel(card, title, 13, C.White, Enum.Font.GothamBold)
-    t.Position = UDim2.fromOffset(12, 7)
-    t.Size = UDim2.new(1, -100, 0, 23)
+    local t = makeLabel(card, title, 15, C.White, Enum.Font.GothamBold)
+    t.Position = UDim2.fromOffset(14, 9)
+    t.Size = UDim2.new(1, -120, 0, 26)
 
-    local d = makeLabel(card, description, 10, C.Grey)
-    d.Position = UDim2.fromOffset(12, 34)
-    d.Size = UDim2.new(1, -100, 0, 22)
+    local d = makeLabel(card, description, 12, C.Grey)
+    d.Position = UDim2.fromOffset(14, 41)
+    d.Size = UDim2.new(1, -120, 0, 26)
     d.TextTruncate = Enum.TextTruncate.AtEnd
 
-    local toggle = makeButton(card, "", UDim2.fromOffset(48, 25), UDim2.new(1, -60, 0.5, -12))
+    local toggle = makeButton(card, "", UDim2.fromOffset(64, 32), UDim2.new(1, -78, 0.5, -16))
     local enabled = default
 
     local function update()
@@ -1424,25 +1422,25 @@ local function createSlider(title, minimum, maximum, default, callback, decimals
     local mult = 10 ^ decimals
 
     local card = Instance.new("Frame")
-    card.Size = UDim2.new(1, 0, 0, 85)
+    card.Size = UDim2.new(1, 0, 0, 100)
     card.BackgroundColor3 = C.Panel
     card.BorderSizePixel = 0
     card.Parent = Content
     corner(card, 4)
     outline(card, Color3.fromRGB(45, 53, 63))
 
-    local t = makeLabel(card, title, 12, C.White, Enum.Font.GothamBold)
-    t.Position = UDim2.fromOffset(12, 6)
-    t.Size = UDim2.new(1, -65, 0, 25)
+    local t = makeLabel(card, title, 14, C.White, Enum.Font.GothamBold)
+    t.Position = UDim2.fromOffset(14, 8)
+    t.Size = UDim2.new(1, -80, 0, 28)
 
-    local valueLabel = makeLabel(card, string.format("%." .. decimals .. "f", default), 12, C.Yellow)
-    valueLabel.Position = UDim2.new(1, -70, 0, 6)
-    valueLabel.Size = UDim2.fromOffset(58, 25)
+    local valueLabel = makeLabel(card, string.format("%." .. decimals .. "f", default), 14, C.Yellow)
+    valueLabel.Position = UDim2.new(1, -84, 0, 8)
+    valueLabel.Size = UDim2.fromOffset(70, 28)
     valueLabel.TextXAlignment = Enum.TextXAlignment.Right
 
     local bar = Instance.new("Frame")
-    bar.Position = UDim2.fromOffset(12, 49)
-    bar.Size = UDim2.new(1, -24, 0, 7)
+    bar.Position = UDim2.fromOffset(14, 60)
+    bar.Size = UDim2.new(1, -28, 0, 8)
     bar.BackgroundColor3 = C.Panel2
     bar.BorderSizePixel = 0
     bar.Parent = card
@@ -1503,9 +1501,9 @@ local function createSlider(title, minimum, maximum, default, callback, decimals
 end
 
 local function createButton(text, callback, color)
-    local b = makeButton(Content, text, UDim2.new(1, 0, 0, 42), UDim2.new())
+    local b = makeButton(Content, text, UDim2.new(1, 0, 0, 48), UDim2.new())
     b.BackgroundColor3 = color or C.Red
-    b.TextSize = 14
+    b.TextSize = 16
     b.Activated:Connect(function()
         if callback then callback() end
     end)
@@ -1513,7 +1511,7 @@ local function createButton(text, callback, color)
 end
 
 -- ============================================================
--- CHROME STATUS MONITOR (read-only)
+-- CHROME STATUS MONITOR (read-only, no body)
 -- ============================================================
 local chromeStatusRefresh
 
@@ -1522,120 +1520,47 @@ local function createChromeStatus()
 
     local monitor = Instance.new("Frame")
     monitor.Name = "ChromeMonitor"
-    monitor.Size = UDim2.new(1, 0, 0, 318)
+    monitor.Size = UDim2.new(1, 0, 0, 348)
     monitor.BackgroundTransparency = 1
     monitor.Parent = Content
 
-    local bodyPanel = Instance.new("Frame")
-    bodyPanel.Name = "CyberSkeleton"
-    bodyPanel.Size = UDim2.new(0.42, -5, 1, 0)
-    bodyPanel.BackgroundColor3 = C.Panel
-    bodyPanel.BorderSizePixel = 0
-    bodyPanel.Parent = monitor
-    corner(bodyPanel, 5)
-    outline(bodyPanel, Color3.fromRGB(45, 53, 63))
-
-    local bodyTitle = makeLabel(bodyPanel, "CYBER-SKELETON", 10, C.Cyan, Enum.Font.GothamBold)
-    bodyTitle.Position = UDim2.fromOffset(10, 7)
-    bodyTitle.Size = UDim2.new(1, -20, 0, 18)
-    bodyTitle.TextXAlignment = Enum.TextXAlignment.Center
-
-    local boneColor = Color3.fromRGB(54, 65, 74)
-    local boneStroke = Color3.fromRGB(96, 112, 122)
-
-    local function makeBone(size, position, rotation, round)
-        local bone = Instance.new("Frame")
-        bone.Size = size
-        bone.Position = position
-        bone.Rotation = rotation or 0
-        bone.BackgroundColor3 = boneColor
-        bone.BorderSizePixel = 0
-        bone.Parent = bodyPanel
-        corner(bone, round or 5)
-        outline(bone, boneStroke, 1)
-        return bone
-    end
-
-    local function makeLight(parent, size, position)
-        local light = Instance.new("Frame")
-        light.Size = size
-        light.Position = position
-        light.BackgroundColor3 = C.Red
-        light.BorderSizePixel = 0
-        light.Parent = parent
-        corner(light, 10)
-        local stroke = outline(light, C.Red, 1)
-        return light, stroke
-    end
-
-    -- Head, neck, torso, pelvis and limb segments.
-    local head = Instance.new("Frame")
-    head.Size = UDim2.fromOffset(46, 46)
-    head.Position = UDim2.fromOffset(91, 29)
-    head.BackgroundColor3 = boneColor
-    head.BorderSizePixel = 0
-    head.Parent = bodyPanel
-    corner(head, 18)
-    outline(head, boneStroke, 1.2)
-
-    makeBone(UDim2.fromOffset(18, 13), UDim2.fromOffset(105, 72), 0, 3)
-    makeBone(UDim2.fromOffset(68, 78), UDim2.fromOffset(80, 83), 0, 10)
-    makeBone(UDim2.fromOffset(35, 13), UDim2.fromOffset(48, 91), 25, 5)
-    makeBone(UDim2.fromOffset(35, 13), UDim2.fromOffset(145, 91), -25, 5)
-    makeBone(UDim2.fromOffset(36, 12), UDim2.fromOffset(31, 121), -8, 5)
-    makeBone(UDim2.fromOffset(36, 12), UDim2.fromOffset(161, 121), 8, 5)
-    makeBone(UDim2.fromOffset(58, 22), UDim2.fromOffset(85, 165), 0, 6)
-    makeBone(UDim2.fromOffset(19, 55), UDim2.fromOffset(88, 188), 7, 5)
-    makeBone(UDim2.fromOffset(19, 55), UDim2.fromOffset(122, 188), -7, 5)
-    makeBone(UDim2.fromOffset(16, 47), UDim2.fromOffset(83, 240), 2, 5)
-    makeBone(UDim2.fromOffset(16, 47), UDim2.fromOffset(130, 240), -2, 5)
-    makeBone(UDim2.fromOffset(31, 9), UDim2.fromOffset(72, 286), 0, 4)
-    makeBone(UDim2.fromOffset(31, 9), UDim2.fromOffset(126, 286), 0, 4)
-
-    -- Optics, pulmonary indicators and both arm status lights.
-    local eyeLeft, eyeLeftStroke = makeLight(head, UDim2.fromOffset(8, 8), UDim2.fromOffset(10, 18))
-    local eyeRight, eyeRightStroke = makeLight(head, UDim2.fromOffset(8, 8), UDim2.fromOffset(28, 18))
-    local lungLeft, lungLeftStroke = makeLight(bodyPanel, UDim2.fromOffset(18, 31), UDim2.fromOffset(89, 105))
-    local lungRight, lungRightStroke = makeLight(bodyPanel, UDim2.fromOffset(18, 31), UDim2.fromOffset(121, 105))
-    local armLeft, armLeftStroke = makeLight(bodyPanel, UDim2.fromOffset(9, 9), UDim2.fromOffset(42, 124))
-    local armRight, armRightStroke = makeLight(bodyPanel, UDim2.fromOffset(9, 9), UDim2.fromOffset(177, 124))
-
-    local legend = makeLabel(bodyPanel, "RED  OFF     GREEN  ON", 9, C.Grey, Enum.Font.GothamBold)
-    legend.Position = UDim2.new(0, 6, 1, -19)
-    legend.Size = UDim2.new(1, -12, 0, 14)
-    legend.TextXAlignment = Enum.TextXAlignment.Center
-
     local statusPanel = Instance.new("Frame")
-    statusPanel.Name = "Diagnostics"
-    statusPanel.Position = UDim2.new(0.44, 0, 0, 0)
-    statusPanel.Size = UDim2.new(0.56, 0, 1, 0)
+    statusPanel.Size = UDim2.new(1, 0, 1, 0)
     statusPanel.BackgroundColor3 = C.Panel
     statusPanel.BorderSizePixel = 0
     statusPanel.Parent = monitor
     corner(statusPanel, 5)
     outline(statusPanel, Color3.fromRGB(45, 53, 63))
 
-    local statusTitle = makeLabel(statusPanel, "SYSTEM STATUS", 11, C.Yellow, Enum.Font.GothamBold)
-    statusTitle.Position = UDim2.fromOffset(12, 10)
-    statusTitle.Size = UDim2.new(1, -24, 0, 20)
+    local statusTitle = makeLabel(statusPanel, "SYSTEM STATUS", 14, C.Yellow, Enum.Font.GothamBold)
+    statusTitle.Position = UDim2.fromOffset(16, 14)
+    statusTitle.Size = UDim2.new(1, -32, 0, 24)
 
     local function makeStatusRow(y, title, detail)
         local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, -16, 0, 55)
-        row.Position = UDim2.fromOffset(8, y)
+        row.Size = UDim2.new(1, -24, 0, 62)
+        row.Position = UDim2.fromOffset(12, y)
         row.BackgroundColor3 = C.Panel2
         row.BorderSizePixel = 0
         row.Parent = statusPanel
         corner(row, 4)
 
-        local dot, dotStroke = makeLight(row, UDim2.fromOffset(11, 11), UDim2.fromOffset(10, 21))
-        local titleLabel = makeLabel(row, title, 10, C.White, Enum.Font.GothamBold)
-        titleLabel.Position = UDim2.fromOffset(30, 7)
-        titleLabel.Size = UDim2.new(1, -38, 0, 18)
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(14, 14)
+        dot.Position = UDim2.fromOffset(14, 24)
+        dot.BackgroundColor3 = C.Red
+        dot.BorderSizePixel = 0
+        dot.Parent = row
+        corner(dot, 10)
+        local dotStroke = outline(dot, C.Red, 1.2)
 
-        local stateLabel = makeLabel(row, detail, 9, C.Red, Enum.Font.GothamBold)
-        stateLabel.Position = UDim2.fromOffset(30, 29)
-        stateLabel.Size = UDim2.new(1, -38, 0, 16)
+        local titleLabel = makeLabel(row, title, 13, C.White, Enum.Font.GothamBold)
+        titleLabel.Position = UDim2.fromOffset(38, 9)
+        titleLabel.Size = UDim2.new(1, -50, 0, 22)
+
+        local stateLabel = makeLabel(row, detail, 12, C.Red, Enum.Font.GothamBold)
+        stateLabel.Position = UDim2.fromOffset(38, 33)
+        stateLabel.Size = UDim2.new(1, -50, 0, 20)
         stateLabel.TextTruncate = Enum.TextTruncate.AtEnd
 
         return function(active, activeText, inactiveText)
@@ -1647,21 +1572,15 @@ local function createChromeStatus()
         end
     end
 
-    local updateEyes = makeStatusRow(39, "OPTICS // EYES", "ESP OFFLINE")
-    local updateLungs = makeStatusRow(101, "PULMONARY // LUNGS", "STAMINA MOD OFF")
-    local updateArms = makeStatusRow(163, "MOTOR CONTROL // ARMS", "AUTO BLOCK OFF")
-    local updateSandevistan = makeStatusRow(225, "SANDEVISTAN", "STANDBY")
+    local updateEyes = makeStatusRow(46, "OPTICS // EYES", "ESP OFFLINE")
+    local updateLungs = makeStatusRow(116, "PULMONARY // LUNGS", "STAMINA MOD OFF")
+    local updateArms = makeStatusRow(186, "MOTOR CONTROL // ARMS", "AUTO BLOCK OFF")
+    local updateSandevistan = makeStatusRow(256, "SANDEVISTAN", "STANDBY")
 
-    local readOnly = makeLabel(statusPanel, "READ-ONLY DIAGNOSTIC DISPLAY", 8, C.Grey, Enum.Font.GothamBold)
-    readOnly.Position = UDim2.new(0, 10, 1, -20)
-    readOnly.Size = UDim2.new(1, -20, 0, 14)
+    local readOnly = makeLabel(statusPanel, "READ-ONLY DIAGNOSTIC DISPLAY", 10, C.Grey, Enum.Font.GothamBold)
+    readOnly.Position = UDim2.new(0, 12, 1, -24)
+    readOnly.Size = UDim2.new(1, -24, 0, 16)
     readOnly.TextXAlignment = Enum.TextXAlignment.Center
-
-    local function setLightState(light, stroke, active)
-        local statusColor = active and Color3.fromRGB(35, 255, 135) or C.Red
-        light.BackgroundColor3 = statusColor
-        stroke.Color = statusColor
-    end
 
     chromeStatusRefresh = function()
         local espActive = killerESPActive or survivorESPActive or medkitActive or bloxyActive or genESPActive
@@ -1673,13 +1592,6 @@ local function createChromeStatus()
             or regenDelayValue ~= initialStaminaValues.StaminaRegenDelay
         local autoBlockActive = CONFIG.AutoBlock == true
         local sandevistanReady = BS_CFG.Enabled == true
-
-        setLightState(eyeLeft, eyeLeftStroke, espActive)
-        setLightState(eyeRight, eyeRightStroke, espActive)
-        setLightState(lungLeft, lungLeftStroke, staminaModified)
-        setLightState(lungRight, lungRightStroke, staminaModified)
-        setLightState(armLeft, armLeftStroke, autoBlockActive)
-        setLightState(armRight, armRightStroke, autoBlockActive)
 
         updateEyes(espActive, "ESP SYSTEM ONLINE", "ESP OFFLINE")
         updateLungs(staminaModified, "STAMINA MOD ACTIVE", "STAMINA MOD OFF")
@@ -1693,7 +1605,7 @@ end
 -- ============================================================
 -- TABS
 -- ============================================================
-local Tabs = { "OVERVIEW", "CHROME", "ESP", "STAM", "AUTO BLOCK", "BOX", "HDT", "BACKSTAB" }
+local Tabs = { "OVERVIEW", "CHROME", "ESP", "STAM", "AUTO BLOCK", "BOX", "HDT", "BACKSTAB", "CREDITS" }
 local TabButtons = {}
 local CurrentTab = "OVERVIEW"
 
@@ -1925,6 +1837,16 @@ local function loadTab(tab)
 
         createSection("INFO")
         createInfo("BEHAVIOR", "Teleports behind killer and follows briefly, then releases.")
+
+    elseif tab == "CREDITS" then
+
+        createSection("CREDITS")
+        createInfo("CODING & OWNER", "c00lkid / random_dude")
+        createInfo("HELPER", "viltrumite & Ivy")
+
+        createSection("WHAT DID HELPERS DO?")
+        createInfo("VILTRUMITE", "Helped with some features")
+        createInfo("IVY", "Called us good boys in VC while we coded")
     end
 
     Content.CanvasPosition = Vector2.new(0, 0)
@@ -1942,8 +1864,9 @@ local function updateNavigation()
 end
 
 for _, tab in ipairs(Tabs) do
-    local nav = makeButton(NavContainer, "  " .. tab, UDim2.new(1, 0, 0, 38), UDim2.new())
+    local nav = makeButton(NavContainer, "  " .. tab, UDim2.new(1, 0, 0, 44), UDim2.new())
     nav.TextXAlignment = Enum.TextXAlignment.Left
+    nav.TextSize = 15
     TabButtons[tab] = nav
 
     nav.Activated:Connect(function()
@@ -1954,7 +1877,7 @@ for _, tab in ipairs(Tabs) do
 end
 
 -- ============================================================
--- DRAGGING
+-- DRAGGING (main window header)
 -- ============================================================
 local dragging = false
 local dragStart
@@ -1985,15 +1908,52 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 -- ============================================================
--- REOPEN BUTTON
+-- REOPEN BUTTON (draggable)
 -- ============================================================
-local Reopen = makeButton(Gui, "CS", UDim2.fromOffset(48, 48), UDim2.new(0, 15, 1, -65))
+local Reopen = makeButton(Gui, "CS", UDim2.fromOffset(60, 60), UDim2.new(0, 18, 1, -80))
 Reopen.BackgroundColor3 = C.Yellow
 Reopen.TextColor3 = C.Black
-Reopen.TextSize = 20
+Reopen.TextSize = 24
 Reopen.Font = Enum.Font.GothamBlack
 Reopen.Visible = false
 outline(Reopen, C.Cyan, 1.5)
+
+local reopenDragging = false
+local reopenDragMoved = false
+local reopenDragStart
+local reopenStartPos
+
+Reopen.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        reopenDragging = true
+        reopenDragMoved = false
+        reopenDragStart = input.Position
+        reopenStartPos = Reopen.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if reopenDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - reopenDragStart
+        if math.abs(delta.X) > 4 or math.abs(delta.Y) > 4 then
+            reopenDragMoved = true
+        end
+        if reopenDragMoved then
+            Reopen.Position = UDim2.new(
+                reopenStartPos.X.Scale,
+                reopenStartPos.X.Offset + delta.X,
+                reopenStartPos.Y.Scale,
+                reopenStartPos.Y.Offset + delta.Y
+            )
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        reopenDragging = false
+    end
+end)
 
 -- ============================================================
 -- OPEN / CLOSE
@@ -2015,12 +1975,16 @@ local function openHUD()
     Background.Visible = true
     Main.Visible = true
     Main.Size = UDim2.fromOffset(0, 0)
-    tween(Main, { Size = UDim2.fromOffset(760, 500) }, 0.3)
+    tween(Main, { Size = UDim2.fromOffset(880, 590) }, 0.3)
     Reopen.Visible = false
 end
 
 Close.Activated:Connect(closeHUD)
-Reopen.Activated:Connect(openHUD)
+
+Reopen.Activated:Connect(function()
+    if reopenDragMoved then return end
+    openHUD()
+end)
 
 -- ============================================================
 -- ANIMATION
@@ -2049,7 +2013,6 @@ loadTab("OVERVIEW")
 updateNavigation()
 
 -- Refresh the CHROME readout periodically while its tab is open.
--- This only reads existing feature flags; it does not trigger any feature.
 task.spawn(function()
     while Gui.Parent do
         if CurrentTab == "CHROME" and chromeStatusRefresh then
@@ -2061,7 +2024,7 @@ end)
 
 Main.Size = UDim2.fromOffset(0, 0)
 task.wait(0.1)
-tween(Main, { Size = UDim2.fromOffset(760, 500) }, 0.5)
+tween(Main, { Size = UDim2.fromOffset(880, 590) }, 0.5)
 
 task.delay(0.6, function()
     if isOpen then
