@@ -136,7 +136,7 @@ local function isBlockPayload(payload)
 end
 
 -- ============================================================
--- FIRE BLOCK (fixed — firesignal-only path, remote fallback)
+-- FIRE BLOCK (firesignal-only path, remote fallback)
 -- ============================================================
 local function fireBlock()
     local ui = getMainUI()
@@ -153,8 +153,6 @@ local function fireBlock()
             clickBtn:IsA("ImageButton")
             or clickBtn:IsA("TextButton")
         ) then
-            -- Try each firesignal until one succeeds. If all fail, fall through
-            -- to the remote path instead of returning true for nothing.
             local fired = false
 
             pcall(function() firesignal(clickBtn.MouseButton1Click); fired = true end)
@@ -548,8 +546,13 @@ local function bsFollowBehind(killerModel)
         BS_lerpConn = nil
     end
 
+    -- FIX: correctly capture the current AutoRotate even when it's false.
     local myHum = bsGetMyHum()
-    BS_originalAutoRot = myHum and myHum.AutoRotate or true
+    if myHum then
+        BS_originalAutoRot = myHum.AutoRotate
+    else
+        BS_originalAutoRot = true
+    end
     if myHum then myHum.AutoRotate = false end
 
     local endTime = os.clock() + BS_CFG.FollowDuration
@@ -1320,7 +1323,9 @@ end
 
 local function hookMySound(s)
     if not s:IsA("Sound") then return end
-    return s.Playing:Connect(function()
+    -- FIX: Sound.Playing is a boolean property, not an event.
+    -- The correct event is Sound.Played.
+    return s.Played:Connect(function()
         local sid = soundIdOf(s)
         if not sid then return end
         local abilityName = aimSoundIds[sid]
@@ -1651,7 +1656,8 @@ local function updateScale()
     local camera = workspace.CurrentCamera
     if not camera then return end
     local size = camera.ViewportSize
-    Scale.Scale = math.clamp(math.min(size.X / 960, size.Y / 700), 0.55, 1)
+    -- FIX: no lower clamp. UI always fits the viewport, capped at 1.0.
+    Scale.Scale = math.min(size.X / 960, size.Y / 700, 1)
 end
 
 local viewportConnection
@@ -1947,13 +1953,22 @@ local function createSlider(title, minimum, maximum, default, callback, decimals
     end)
 
     local changedConn = UserInputService.InputChanged:Connect(function(input)
-        if dragging and input == activeInput then
+        if not dragging then return end
+        -- FIX: desktop mouse movement is a different InputObject from the press,
+        -- so identity matching must be skipped for MouseMovement. Mobile uses
+        -- identity matching so another finger can't hijack this slider.
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            setValue(input.Position.X)
+        elseif input.UserInputType == Enum.UserInputType.Touch and input == activeInput then
             setValue(input.Position.X)
         end
     end)
 
     local endedConn = UserInputService.InputEnded:Connect(function(input)
-        if input == activeInput then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+            activeInput = nil
+        elseif input.UserInputType == Enum.UserInputType.Touch and input == activeInput then
             dragging = false
             activeInput = nil
         end
@@ -1971,7 +1986,7 @@ local function createSlider(title, minimum, maximum, default, callback, decimals
             local percent = math.clamp((v - minimum) / (maximum - minimum), 0, 1)
             fill.Size = UDim2.fromScale(percent, 1)
             valueLabel.Text = string.format("%." .. decimals .. "f", v)
-            callback(v) -- now fires the setting callback too
+            callback(v)
         end
     }
 end
