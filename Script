@@ -1064,6 +1064,16 @@ local staminaGainValue  = (ok and sprintModule and sprintModule.StaminaGain) or 
 local staminaDrainValue = (ok and sprintModule and sprintModule.StaminaDrain) or 1
 local regenDelayValue   = (ok and sprintModule and sprintModule.StaminaRegenDelay) or 0.5
 
+-- Baseline values let the CHROME monitor detect slider changes without
+-- changing or intercepting the stamina system itself.
+local initialStaminaValues = {
+    MaxStamina = maxStaminaValue,
+    SprintSpeed = sprintSpeedValue,
+    StaminaGain = staminaGainValue,
+    StaminaDrain = staminaDrainValue,
+    StaminaRegenDelay = regenDelayValue,
+}
+
 local infStaminaActive, staminaThread = false, nil
 
 local function enableInfStamina()
@@ -1503,9 +1513,187 @@ local function createButton(text, callback, color)
 end
 
 -- ============================================================
+-- CHROME STATUS MONITOR (read-only)
+-- ============================================================
+local chromeStatusRefresh
+
+local function createChromeStatus()
+    createSection("CHROME // CYBERWARE DIAGNOSTICS")
+
+    local monitor = Instance.new("Frame")
+    monitor.Name = "ChromeMonitor"
+    monitor.Size = UDim2.new(1, 0, 0, 318)
+    monitor.BackgroundTransparency = 1
+    monitor.Parent = Content
+
+    local bodyPanel = Instance.new("Frame")
+    bodyPanel.Name = "CyberSkeleton"
+    bodyPanel.Size = UDim2.new(0.42, -5, 1, 0)
+    bodyPanel.BackgroundColor3 = C.Panel
+    bodyPanel.BorderSizePixel = 0
+    bodyPanel.Parent = monitor
+    corner(bodyPanel, 5)
+    outline(bodyPanel, Color3.fromRGB(45, 53, 63))
+
+    local bodyTitle = makeLabel(bodyPanel, "CYBER-SKELETON", 10, C.Cyan, Enum.Font.GothamBold)
+    bodyTitle.Position = UDim2.fromOffset(10, 7)
+    bodyTitle.Size = UDim2.new(1, -20, 0, 18)
+    bodyTitle.TextXAlignment = Enum.TextXAlignment.Center
+
+    local boneColor = Color3.fromRGB(54, 65, 74)
+    local boneStroke = Color3.fromRGB(96, 112, 122)
+
+    local function makeBone(size, position, rotation, round)
+        local bone = Instance.new("Frame")
+        bone.Size = size
+        bone.Position = position
+        bone.Rotation = rotation or 0
+        bone.BackgroundColor3 = boneColor
+        bone.BorderSizePixel = 0
+        bone.Parent = bodyPanel
+        corner(bone, round or 5)
+        outline(bone, boneStroke, 1)
+        return bone
+    end
+
+    local function makeLight(parent, size, position)
+        local light = Instance.new("Frame")
+        light.Size = size
+        light.Position = position
+        light.BackgroundColor3 = C.Red
+        light.BorderSizePixel = 0
+        light.Parent = parent
+        corner(light, 10)
+        local stroke = outline(light, C.Red, 1)
+        return light, stroke
+    end
+
+    -- Head, neck, torso, pelvis and limb segments.
+    local head = Instance.new("Frame")
+    head.Size = UDim2.fromOffset(46, 46)
+    head.Position = UDim2.fromOffset(91, 29)
+    head.BackgroundColor3 = boneColor
+    head.BorderSizePixel = 0
+    head.Parent = bodyPanel
+    corner(head, 18)
+    outline(head, boneStroke, 1.2)
+
+    makeBone(UDim2.fromOffset(18, 13), UDim2.fromOffset(105, 72), 0, 3)
+    makeBone(UDim2.fromOffset(68, 78), UDim2.fromOffset(80, 83), 0, 10)
+    makeBone(UDim2.fromOffset(35, 13), UDim2.fromOffset(48, 91), 25, 5)
+    makeBone(UDim2.fromOffset(35, 13), UDim2.fromOffset(145, 91), -25, 5)
+    makeBone(UDim2.fromOffset(36, 12), UDim2.fromOffset(31, 121), -8, 5)
+    makeBone(UDim2.fromOffset(36, 12), UDim2.fromOffset(161, 121), 8, 5)
+    makeBone(UDim2.fromOffset(58, 22), UDim2.fromOffset(85, 165), 0, 6)
+    makeBone(UDim2.fromOffset(19, 55), UDim2.fromOffset(88, 188), 7, 5)
+    makeBone(UDim2.fromOffset(19, 55), UDim2.fromOffset(122, 188), -7, 5)
+    makeBone(UDim2.fromOffset(16, 47), UDim2.fromOffset(83, 240), 2, 5)
+    makeBone(UDim2.fromOffset(16, 47), UDim2.fromOffset(130, 240), -2, 5)
+    makeBone(UDim2.fromOffset(31, 9), UDim2.fromOffset(72, 286), 0, 4)
+    makeBone(UDim2.fromOffset(31, 9), UDim2.fromOffset(126, 286), 0, 4)
+
+    -- Optics, pulmonary indicators and both arm status lights.
+    local eyeLeft, eyeLeftStroke = makeLight(head, UDim2.fromOffset(8, 8), UDim2.fromOffset(10, 18))
+    local eyeRight, eyeRightStroke = makeLight(head, UDim2.fromOffset(8, 8), UDim2.fromOffset(28, 18))
+    local lungLeft, lungLeftStroke = makeLight(bodyPanel, UDim2.fromOffset(18, 31), UDim2.fromOffset(89, 105))
+    local lungRight, lungRightStroke = makeLight(bodyPanel, UDim2.fromOffset(18, 31), UDim2.fromOffset(121, 105))
+    local armLeft, armLeftStroke = makeLight(bodyPanel, UDim2.fromOffset(9, 9), UDim2.fromOffset(42, 124))
+    local armRight, armRightStroke = makeLight(bodyPanel, UDim2.fromOffset(9, 9), UDim2.fromOffset(177, 124))
+
+    local legend = makeLabel(bodyPanel, "RED  OFF     GREEN  ON", 9, C.Grey, Enum.Font.GothamBold)
+    legend.Position = UDim2.new(0, 6, 1, -19)
+    legend.Size = UDim2.new(1, -12, 0, 14)
+    legend.TextXAlignment = Enum.TextXAlignment.Center
+
+    local statusPanel = Instance.new("Frame")
+    statusPanel.Name = "Diagnostics"
+    statusPanel.Position = UDim2.new(0.44, 0, 0, 0)
+    statusPanel.Size = UDim2.new(0.56, 0, 1, 0)
+    statusPanel.BackgroundColor3 = C.Panel
+    statusPanel.BorderSizePixel = 0
+    statusPanel.Parent = monitor
+    corner(statusPanel, 5)
+    outline(statusPanel, Color3.fromRGB(45, 53, 63))
+
+    local statusTitle = makeLabel(statusPanel, "SYSTEM STATUS", 11, C.Yellow, Enum.Font.GothamBold)
+    statusTitle.Position = UDim2.fromOffset(12, 10)
+    statusTitle.Size = UDim2.new(1, -24, 0, 20)
+
+    local function makeStatusRow(y, title, detail)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -16, 0, 55)
+        row.Position = UDim2.fromOffset(8, y)
+        row.BackgroundColor3 = C.Panel2
+        row.BorderSizePixel = 0
+        row.Parent = statusPanel
+        corner(row, 4)
+
+        local dot, dotStroke = makeLight(row, UDim2.fromOffset(11, 11), UDim2.fromOffset(10, 21))
+        local titleLabel = makeLabel(row, title, 10, C.White, Enum.Font.GothamBold)
+        titleLabel.Position = UDim2.fromOffset(30, 7)
+        titleLabel.Size = UDim2.new(1, -38, 0, 18)
+
+        local stateLabel = makeLabel(row, detail, 9, C.Red, Enum.Font.GothamBold)
+        stateLabel.Position = UDim2.fromOffset(30, 29)
+        stateLabel.Size = UDim2.new(1, -38, 0, 16)
+        stateLabel.TextTruncate = Enum.TextTruncate.AtEnd
+
+        return function(active, activeText, inactiveText)
+            local statusColor = active and Color3.fromRGB(35, 255, 135) or C.Red
+            dot.BackgroundColor3 = statusColor
+            dotStroke.Color = statusColor
+            stateLabel.TextColor3 = statusColor
+            stateLabel.Text = active and activeText or inactiveText
+        end
+    end
+
+    local updateEyes = makeStatusRow(39, "OPTICS // EYES", "ESP OFFLINE")
+    local updateLungs = makeStatusRow(101, "PULMONARY // LUNGS", "STAMINA MOD OFF")
+    local updateArms = makeStatusRow(163, "MOTOR CONTROL // ARMS", "AUTO BLOCK OFF")
+    local updateSandevistan = makeStatusRow(225, "SANDEVISTAN", "STANDBY")
+
+    local readOnly = makeLabel(statusPanel, "READ-ONLY DIAGNOSTIC DISPLAY", 8, C.Grey, Enum.Font.GothamBold)
+    readOnly.Position = UDim2.new(0, 10, 1, -20)
+    readOnly.Size = UDim2.new(1, -20, 0, 14)
+    readOnly.TextXAlignment = Enum.TextXAlignment.Center
+
+    local function setLightState(light, stroke, active)
+        local statusColor = active and Color3.fromRGB(35, 255, 135) or C.Red
+        light.BackgroundColor3 = statusColor
+        stroke.Color = statusColor
+    end
+
+    chromeStatusRefresh = function()
+        local espActive = killerESPActive or survivorESPActive or medkitActive or bloxyActive or genESPActive
+        local staminaModified = infStaminaActive
+            or maxStaminaValue ~= initialStaminaValues.MaxStamina
+            or sprintSpeedValue ~= initialStaminaValues.SprintSpeed
+            or staminaGainValue ~= initialStaminaValues.StaminaGain
+            or staminaDrainValue ~= initialStaminaValues.StaminaDrain
+            or regenDelayValue ~= initialStaminaValues.StaminaRegenDelay
+        local autoBlockActive = CONFIG.AutoBlock == true
+        local sandevistanReady = BS_CFG.Enabled == true
+
+        setLightState(eyeLeft, eyeLeftStroke, espActive)
+        setLightState(eyeRight, eyeRightStroke, espActive)
+        setLightState(lungLeft, lungLeftStroke, staminaModified)
+        setLightState(lungRight, lungRightStroke, staminaModified)
+        setLightState(armLeft, armLeftStroke, autoBlockActive)
+        setLightState(armRight, armRightStroke, autoBlockActive)
+
+        updateEyes(espActive, "ESP SYSTEM ONLINE", "ESP OFFLINE")
+        updateLungs(staminaModified, "STAMINA MOD ACTIVE", "STAMINA MOD OFF")
+        updateArms(autoBlockActive, "AUTO BLOCK ACTIVE", "AUTO BLOCK OFF")
+        updateSandevistan(sandevistanReady, "READY FOR USE", "STANDBY")
+    end
+
+    chromeStatusRefresh()
+end
+
+-- ============================================================
 -- TABS
 -- ============================================================
-local Tabs = { "OVERVIEW", "ESP", "STAM", "AUTO BLOCK", "BOX", "HDT", "BACKSTAB" }
+local Tabs = { "OVERVIEW", "CHROME", "ESP", "STAM", "AUTO BLOCK", "BOX", "HDT", "BACKSTAB" }
 local TabButtons = {}
 local CurrentTab = "OVERVIEW"
 
@@ -1549,6 +1737,10 @@ local function loadTab(tab)
             Scanline.Visible = v
             notify("HUD effects " .. (v and "enabled" or "disabled"))
         end)
+
+    elseif tab == "CHROME" then
+
+        createChromeStatus()
 
     elseif tab == "ESP" then
 
@@ -1855,6 +2047,17 @@ end)
 -- ============================================================
 loadTab("OVERVIEW")
 updateNavigation()
+
+-- Refresh the CHROME readout periodically while its tab is open.
+-- This only reads existing feature flags; it does not trigger any feature.
+task.spawn(function()
+    while Gui.Parent do
+        if CurrentTab == "CHROME" and chromeStatusRefresh then
+            pcall(chromeStatusRefresh)
+        end
+        task.wait(0.25)
+    end
+end)
 
 Main.Size = UDim2.fromOffset(0, 0)
 task.wait(0.1)
