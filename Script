@@ -1,12 +1,9 @@
 --[[
-    GODSAKEN UNIFIED v1.4 — REDLINE UI
-    Backend: v1.3 (5 bug fixes applied)
+    GODSAKEN UNIFIED v1.5 — REDLINE
+    Backend: raw attribute auto block + hi.txt facing zones (Circle/Dot/Diamond)
     UI:      C00lsaken Redline (Obsidian)
 ]]
 
---═══════════════════════════════════════════════════════════════════
--- SERVICES + CHARACTER STATE
---═══════════════════════════════════════════════════════════════════
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService        = game:GetService("RunService")
@@ -44,9 +41,27 @@ local function _num(v, d) return tonumber(v) or d end
 -- SETTINGS
 --═══════════════════════════════════════════════════════════════════
 local Settings = {
-    AB_Enabled = false, AB_BlockType = "Sound", AB_Range = 15,
-    AB_FacingCheck = false, AB_Dot = 0.5, AB_RangeVisual = false,
-    AB_Mode = "Guest1337",
+    -- Auto Block (raw)
+    AB_Enabled     = false,
+    AB_Mode        = "Guest1337",
+    AB_ShowZone    = true,
+
+    -- Facing zone (only one active)
+    AB_FacingMode  = "Circle",   -- "Circle" | "Dot" | "Diamond"
+
+    -- Circle editor
+    AB_CircleRadius  = 8,
+
+    -- Dot editor (circle in front)
+    AB_DotRadius     = 5,
+    AB_DotDistance   = 4,
+
+    -- Diamond editor
+    AB_DiamondLength = 8,
+    AB_DiamondWidth  = 4,
+    AB_DiamondOffset = 3,
+
+    -- Other features
     ABT_Enabled = false, ABT_Duration = 0.5,
     AP_Enabled = false, AP_Delay = 0.5,
     PA_Enabled = false, PA_Prediction = 4,
@@ -62,62 +77,8 @@ local Settings = {
 }
 
 --═══════════════════════════════════════════════════════════════════
--- DATA TABLES
+-- DATA (Parry / Punch / AntiBait / HDT anim ID tables)
 --═══════════════════════════════════════════════════════════════════
-local ValidSounds = {}
-for _, id in ipairs({
-    101199185291628,104910828105172,105204810054381,105516183226360,
-    105840448036441,106836941416453,108610718831698,108907358619313,
-    109348678063422,112809109188560,113413858159336,114742322778642,
-    115026634746636,115678417928765,116468089135195,116581754553533,
-    117173212095661,118562842802948,119664480754070,119942598489800,
-    120749612844426,105458270463374,106427068964975,106538427162796,
-    106774825859733,106860049270347,108196996477620,109572851772132,
-    109667959938617,110153465553223,114126519127454,114266653674439,
-    114506382930939,116107946837042,116618003477002,118298475669935,
-    120112897026015,120950360130737,121080480916189,121293883585738,
-    121858217776572,122709416391891,123172382755876,123556520269026,
-    124269076578545,124705663396411,125403313786645,126171487400618,
-    126830014841198,127154365553241,127245564598429,129260077168659,
-    129405885079224,129638875679599,129921445546291,130321333480982,
-    130958529065375,134720314512566,135853087227453,138938529389204,
-    70371667919898,70785407091644,70948173568515,74707328554358,
-    77375846492436,80277760801310,81299297965542,81362825527808,
-    82843272472677,83829782357897,84069821282466,87294535821555,
-    87989533095285,88451353906104,88970503168421,90620531468240,
-    91509234639766,92567970681901,93069721274110,93366464803829,
-    94958041603347,96587400766332,99824350842479,99829427721752,
-    123497933758952,123835423223220,123923371062204,124234993291213,
-    124903763333174,128195973631079,128856426573270,131123355704017,
-    131406927389838,132581672170205,133709029886490,135319730390518,
-    136323728355613,137809737339569,140242176732868,70739368096233,
-    73662192846371,74809026448465,75330693422988,79391273191671,
-    80516583309685,82221759983649,84307400688050,85853080745515,
-    86174610237192,89004992452376,92869747208256,93299090238530,
-    94317217837143,95079963655241,98111231282218,98675142200448,
-    98733709078792,98742773509325,99215225043220,99856718263455,
-}) do ValidSounds["rbxassetid://"..id] = true end
-
-local ValidAnimations = {}
-for _, id in ipairs({
-    105458270463374,106427068964975,106538427162796,106774825859733,
-    106860049270347,108196996477620,109572851772132,109667959938617,
-    110153465553223,114126519127454,114266653674439,114506382930939,
-    116107946837042,116618003477002,118298475669935,120112897026015,
-    120950360130737,121080480916189,121293883585738,121858217776572,
-    122709416391891,123172382755876,123556520269026,124269076578545,
-    124705663396411,125403313786645,126171487400618,126830014841198,
-    127154365553241,127245564598429,129260077168659,129405885079224,
-    129638875679599,129921445546291,130321333480982,130958529065375,
-    134720314512566,135853087227453,138938529389204,70371667919898,
-    70785407091644,70948173568515,74707328554358,77375846492436,
-    80277760801310,81299297965542,81362825527808,82843272472677,
-    83829782357897,84069821282466,87294535821555,87989533095285,
-    88451353906104,88970503168421,90620531468240,91509234639766,
-    92567970681901,93069721274110,93366464803829,94958041603347,
-    96587400766332,99824350842479,99829427721752,
-}) do ValidAnimations["rbxassetid://"..id] = true end
-
 local ParrySounds = {}
 for _, id in ipairs({
     102808968188291,114975236395509,116616310968045,117828699507982,
@@ -159,11 +120,61 @@ for _, id in ipairs({
 }) do HDT_Anims["rbxassetid://"..id] = true end
 
 --═══════════════════════════════════════════════════════════════════
--- AUTO BLOCK
+-- AUTO BLOCK — RAW ATTRIBUTE + FACING ZONES
 --═══════════════════════════════════════════════════════════════════
-local AB = { running=false, loop=nil, playedOut={}, blocked={}, coneValid={}, visual={} }
-local RED, GREEN = Color3.fromRGB(255,70,70), Color3.fromRGB(70,255,120)
+local AB = {
+    running = false, loop = nil,
+    attrState = {}, inZone = {}, visual = {},
+    lastBlock = 0,
+}
 
+local PLAYER_R = 1.5
+local RED   = Color3.fromRGB(255, 70, 70)
+local GREEN = Color3.fromRGB(70, 255, 120)
+
+--─────────────────── ZONE GEOMETRY ───────────────────
+local function AB_IsInZone(myPos, killerRoot)
+    local mode = Settings.AB_FacingMode
+    local kCF = killerRoot.CFrame
+    local kPos = killerRoot.Position
+
+    if mode == "Circle" then
+        local dx = myPos.X - kPos.X
+        local dz = myPos.Z - kPos.Z
+        local r = Settings.AB_CircleRadius + PLAYER_R
+        return dx*dx + dz*dz <= r*r
+
+    elseif mode == "Dot" then
+        local fwd = kCF.LookVector
+        local flatFwd = Vector3.new(fwd.X, 0, fwd.Z)
+        if flatFwd.Magnitude < 0.01 then flatFwd = Vector3.new(0, 0, -1) end
+        flatFwd = flatFwd.Unit
+        local center = kPos + flatFwd * Settings.AB_DotDistance
+        local dx = myPos.X - center.X
+        local dz = myPos.Z - center.Z
+        local r = Settings.AB_DotRadius + PLAYER_R
+        return dx*dx + dz*dz <= r*r
+
+    elseif mode == "Diamond" then
+        local fwd = kCF.LookVector
+        local rgt = kCF.RightVector
+        local ff = Vector3.new(fwd.X, 0, fwd.Z)
+        local rr = Vector3.new(rgt.X, 0, rgt.Z)
+        if ff.Magnitude < 0.01 or rr.Magnitude < 0.01 then return false end
+        ff = ff.Unit; rr = rr.Unit
+        local tp = Vector3.new(myPos.X - kPos.X, 0, myPos.Z - kPos.Z)
+        local dF = tp:Dot(ff)
+        local dR = tp:Dot(rr)
+        local cd = Settings.AB_DiamondOffset + Settings.AB_DiamondLength/2
+        local d = dF - cd
+        local hw = Settings.AB_DiamondWidth/2 + PLAYER_R
+        local hl = Settings.AB_DiamondLength/2 + PLAYER_R
+        return math.abs(dR)/hw + math.abs(d)/hl <= 1
+    end
+    return false
+end
+
+--─────────────────── FIRE ───────────────────
 local function AB_FireBlock()
     if not NetworkEvent then return end
     local name = Settings.AB_Mode == "007n7" and "Clone" or "Block"
@@ -180,22 +191,82 @@ local function AB_FireBlock()
     end
 end
 
+--─────────────────── LOOP (RAW ATTRIBUTE POLL) ───────────────────
+local function AB_Loop()
+    while AB.running do
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root and root.Parent then
+            local kf = GetKillersFolder()
+            if kf then
+                for _, killer in ipairs(kf:GetChildren()) do
+                    if killer:IsA("Model") and killer.Parent then
+                        local hrp = killer:FindFirstChild("HumanoidRootPart")
+                        if hrp and hrp.Parent then
+                            -- 1) compute zone membership
+                            AB.inZone[killer] = AB_IsInZone(root.Position, hrp)
+
+                            -- 2) raw attribute poll
+                            local aLU = killer:GetAttribute("AbilityLastUsed") or 0
+                            local aU  = killer:GetAttribute("AbilitiesUsed")   or 0
+                            local st  = AB.attrState[killer]
+
+                            if not st then
+                                AB.attrState[killer] = { lastAbility=aLU, lastUsed=aU, bait=false }
+                            else
+                                local inc = aLU > st.lastAbility
+                                if aU > st.lastUsed then st.bait = true end
+
+                                if inc then
+                                    if st.bait then
+                                        st.bait = false
+                                    else
+                                        -- block ONLY if in zone
+                                        if AB.inZone[killer] then
+                                            local now = tick()
+                                            if now - AB.lastBlock >= 0.15 then
+                                                AB.lastBlock = now
+                                                AB_FireBlock()
+                                            end
+                                        end
+                                    end
+                                end
+
+                                st.lastAbility = aLU
+                                st.lastUsed    = aU
+                            end
+                        end
+                    end
+                end
+            end
+            -- prune
+            for k in pairs(AB.attrState) do
+                if not k.Parent then
+                    AB.attrState[k] = nil
+                    AB.inZone[k] = nil
+                end
+            end
+        end
+        task.wait(0.1)
+    end
+end
+
+--─────────────────── VISUALS ───────────────────
 local function AB_RemoveVisual(model)
     local v = AB.visual[model]
     if v and v.folder then v.folder:Destroy() end
-    AB.visual[model] = nil; AB.coneValid[model] = nil
+    AB.visual[model] = nil
 end
 
 local function AB_MakePart(folder)
     local p = Instance.new("Part")
     p.Anchored=true; p.CanCollide=false; p.CanTouch=false; p.CanQuery=false; p.CastShadow=false
-    p.Material=Enum.Material.SmoothPlastic; p.Transparency=0.78; p.Parent=folder
+    p.Material=Enum.Material.Neon; p.Transparency=0.35; p.Parent=folder
     return p
 end
 
 local function AB_UpdateVisual(model, hrp)
     if not hrp or not hrp.Parent then AB_RemoveVisual(model); return end
-    if not Settings.AB_RangeVisual and not Settings.AB_FacingCheck then AB_RemoveVisual(model); return end
     if not LocalRoot or not LocalRoot.Parent then return end
 
     local v = AB.visual[model]
@@ -204,173 +275,118 @@ local function AB_UpdateVisual(model, hrp)
         v = { folder=folder, parts={}, mode=nil }; AB.visual[model]=v
     end
 
-    local origin, range = hrp.Position, Settings.AB_Range
-    local off = LocalRoot.Position - origin
-    local flatOff = Vector3.new(off.X, 0, off.Z)
-    local dist = flatOff.Magnitude
-    local inRange = dist <= range
+    local color = (AB.inZone[model] == true) and GREEN or RED
+    local mode  = Settings.AB_FacingMode
+    local origin = hrp.Position
 
-    local inFacing = true
-    if Settings.AB_FacingCheck and dist > 0.001 then
-        local lv = hrp.CFrame.LookVector
-        local flatLook = Vector3.new(lv.X, 0, lv.Z)
-        if flatLook.Magnitude > 0.001 and flatOff.Magnitude > 0.001 then
-            inFacing = flatLook.Unit:Dot(flatOff.Unit) > Settings.AB_Dot
-        end
-    end
+    -- (re)build shape if mode changed
+    if v.mode ~= mode then
+        for _, p in ipairs(v.parts) do p:Destroy() end
+        table.clear(v.parts)
+        v.mode = mode; v.circle = nil
 
-    local valid
-    if Settings.AB_FacingCheck then valid = inRange and inFacing else valid = inRange end
-    AB.coneValid[model] = valid
-    local color = valid and GREEN or RED
-
-    if not Settings.AB_FacingCheck then
-        if v.mode ~= "Circle" then
-            for _, p in ipairs(v.parts) do p:Destroy() end; table.clear(v.parts)
-            local c = AB_MakePart(v.folder); c.Shape=Enum.PartType.Cylinder
-            v.circle=c; v.mode="Circle"; table.insert(v.parts, c)
-        end
-        v.circle.Color = color
-        v.circle.Size = Vector3.new(0.12, range*2, range*2)
-        v.circle.CFrame = CFrame.new(origin + Vector3.new(0,0.04,0)) * CFrame.Angles(0,0,math.rad(90))
-        return
-    end
-
-    if v.mode ~= "FacingOutline" then
-        for _, p in ipairs(v.parts) do p:Destroy() end; table.clear(v.parts)
-        v.mode = "FacingOutline"
-        for i=1,4 do
-            local p = AB_MakePart(v.folder); p.Transparency = Settings.AB_RangeVisual and 0 or 1
-            table.insert(v.parts, p)
-        end
-        for i=1,3 do
-            local b = Instance.new("Part")
-            b.Shape=Enum.PartType.Ball; b.Anchored=true; b.CanCollide=false
-            b.CanTouch=false; b.CanQuery=false; b.CastShadow=false
-            b.Material=Enum.Material.SmoothPlastic; b.Size=Vector3.new(0.65,0.65,0.65)
-            b.Transparency = Settings.AB_RangeVisual and 0 or 1
-            b.Parent=v.folder; table.insert(v.parts, b)
-        end
-    end
-
-    local halfAngle = math.acos(math.clamp(Settings.AB_Dot, -1, 1))
-    local lv = hrp.CFrame.LookVector
-    local flatFwd = Vector3.new(lv.X, 0, lv.Z)
-    if flatFwd.Magnitude < 0.001 then return end
-    flatFwd = flatFwd.Unit
-    local right = Vector3.new(-flatFwd.Z, 0, flatFwd.X)
-    local leftDir  = (flatFwd*math.cos(halfAngle) - right*math.sin(halfAngle)).Unit
-    local rightDir = (flatFwd*math.cos(halfAngle) + right*math.sin(halfAngle)).Unit
-    local yOff = 0.08
-    local oP  = origin + Vector3.new(0,yOff,0)
-    local lP  = origin + leftDir*range + Vector3.new(0,yOff,0)
-    local rP  = origin + rightDir*range + Vector3.new(0,yOff,0)
-    local bP  = origin + flatFwd*range + Vector3.new(0,yOff,0)
-
-    local function posLine(part, a, b)
-        local diff = b - a; local len = diff.Magnitude
-        if len <= 0.001 then part.Transparency = 1; return end
-        part.Transparency = Settings.AB_RangeVisual and 0 or 1
-        part.Color = color; part.Size = Vector3.new(0.12,0.12,len)
-        part.CFrame = CFrame.lookAt((a+b)/2, b)
-    end
-    posLine(v.parts[1], oP, lP); posLine(v.parts[2], oP, rP)
-    posLine(v.parts[3], lP, bP); posLine(v.parts[4], rP, bP)
-
-    local lp, rp, bp = v.parts[5], v.parts[6], v.parts[7]
-    lp.Color, rp.Color, bp.Color = color, color, color
-    lp.Position, rp.Position, bp.Position = lP, rP, bP
-    lp.Transparency = Settings.AB_RangeVisual and 0 or 1
-    rp.Transparency = Settings.AB_RangeVisual and 0 or 1
-    bp.Transparency = Settings.AB_RangeVisual and 0 or 1
-end
-
-local function AB_CheckSound(model, hrp, root)
-    for _, obj in ipairs(model:GetDescendants()) do
-        if obj:IsA("Sound") and ValidSounds[obj.SoundId] then
-            if obj.IsPlaying then
-                local inR = (root.Position - hrp.Position).Magnitude <= Settings.AB_Range
-                local canBlock = Settings.AB_FacingCheck and (AB.coneValid[model]==true) or inR
-                if AB.playedOut[obj] == nil then AB.playedOut[obj] = not inR end
-                if canBlock and not AB.playedOut[obj] and not AB.blocked[obj] then
-                    AB.blocked[obj] = true; AB_FireBlock()
-                end
-            else
-                AB.playedOut[obj] = nil; AB.blocked[obj] = nil
+        if mode == "Circle" or mode == "Dot" then
+            local c = AB_MakePart(v.folder)
+            c.Shape = Enum.PartType.Cylinder
+            table.insert(v.parts, c); v.circle = c
+        elseif mode == "Diamond" then
+            for i=1,4 do table.insert(v.parts, AB_MakePart(v.folder)) end
+            for i=1,4 do
+                local b = Instance.new("Part")
+                b.Shape=Enum.PartType.Ball; b.Anchored=true; b.CanCollide=false
+                b.CanTouch=false; b.CanQuery=false; b.CastShadow=false
+                b.Material=Enum.Material.Neon; b.Size=Vector3.new(0.7,0.7,0.7)
+                b.Parent=v.folder; table.insert(v.parts, b)
             end
         end
     end
-end
 
-local function AB_CheckAnim(model, hrp, root)
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    local anim = hum and hum:FindFirstChildOfClass("Animator"); if not anim then return end
-    for _, track in ipairs(anim:GetPlayingAnimationTracks()) do
-        local aid = track.Animation and track.Animation.AnimationId
-        if aid and ValidAnimations[aid] then
-            local inR = (root.Position - hrp.Position).Magnitude <= Settings.AB_Range
-            local canBlock = Settings.AB_FacingCheck and (AB.coneValid[model]==true) or inR
-            if AB.playedOut[track] == nil then AB.playedOut[track] = not inR end
-            if canBlock and not AB.playedOut[track] and not AB.blocked[track] then
-                AB.blocked[track] = true; AB_FireBlock()
-            end
+    if mode == "Circle" or mode == "Dot" then
+        local c = v.circle
+        local center, radius
+        if mode == "Circle" then
+            center, radius = origin, Settings.AB_CircleRadius
+        else
+            local fwd = hrp.CFrame.LookVector
+            local flatFwd = Vector3.new(fwd.X, 0, fwd.Z)
+            if flatFwd.Magnitude < 0.01 then flatFwd = Vector3.new(0,0,-1) end
+            flatFwd = flatFwd.Unit
+            center = origin + flatFwd * Settings.AB_DotDistance
+            radius = Settings.AB_DotRadius
         end
-    end
-end
+        c.Color = color
+        c.Size  = Vector3.new(0.18, radius*2, radius*2)
+        c.CFrame = CFrame.new(center + Vector3.new(0, 0.04, 0)) * CFrame.Angles(0, 0, math.rad(90))
 
-local function AB_Loop()
-    while AB.running do
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root and root.Parent then
-            local kf = GetKillersFolder()
-            if kf then
-                for _, m in ipairs(kf:GetChildren()) do
-                    if m:IsA("Model") and m.Parent then
-                        local hrp = m:FindFirstChild("HumanoidRootPart")
-                        if hrp and hrp.Parent then
-                            if Settings.AB_BlockType == "Sound" then AB_CheckSound(m, hrp, root)
-                            else AB_CheckAnim(m, hrp, root) end
-                        end
-                    end
-                end
-            end
-            for obj in pairs(AB.playedOut) do
-                if typeof(obj) == "Instance"
-                   and (obj:IsA("AnimationTrack") or obj:IsA("Sound"))
-                   and not obj.IsPlaying then
-                    AB.playedOut[obj] = nil; AB.blocked[obj] = nil
-                end
-            end
+    elseif mode == "Diamond" then
+        local fwd = hrp.CFrame.LookVector
+        local flatFwd = Vector3.new(fwd.X, 0, fwd.Z)
+        if flatFwd.Magnitude < 0.01 then flatFwd = Vector3.new(0,0,-1) end
+        flatFwd = flatFwd.Unit
+        local rgt = Vector3.new(-flatFwd.Z, 0, flatFwd.X)
+        local off, L, W = Settings.AB_DiamondOffset, Settings.AB_DiamondLength, Settings.AB_DiamondWidth
+        local yOff = 0.06
+        local pBase  = origin + flatFwd*off          + Vector3.new(0, yOff, 0)
+        local pTip   = origin + flatFwd*(off + L)    + Vector3.new(0, yOff, 0)
+        local pLeft  = origin + flatFwd*(off + L/2) - rgt*(W/2) + Vector3.new(0, yOff, 0)
+        local pRight = origin + flatFwd*(off + L/2) + rgt*(W/2) + Vector3.new(0, yOff, 0)
+
+        local function posLine(part, a, b)
+            local diff = b - a; local len = diff.Magnitude
+            if len <= 0.001 then part.Transparency = 1; return end
+            part.Transparency = 0.35
+            part.Color = color
+            part.Size = Vector3.new(0.18, 0.18, len)
+            part.CFrame = CFrame.lookAt((a+b)/2, b)
         end
-        task.wait(0.1)
-    end
-end
+        posLine(v.parts[1], pBase,  pLeft)
+        posLine(v.parts[2], pBase,  pRight)
+        posLine(v.parts[3], pLeft,  pTip)
+        posLine(v.parts[4], pRight, pTip)
 
-local function AB_Enable()
-    if AB.running then return end
-    AB.running = true; table.clear(AB.playedOut); table.clear(AB.blocked)
-    AB.loop = task.spawn(AB_Loop)
-end
-local function AB_Disable()
-    AB.running = false
-    if AB.loop then pcall(task.cancel, AB.loop); AB.loop = nil end
-    table.clear(AB.playedOut); table.clear(AB.blocked)
+        local b1,b2,b3,b4 = v.parts[5], v.parts[6], v.parts[7], v.parts[8]
+        for _, b in ipairs({b1,b2,b3,b4}) do b.Color = color; b.Transparency = 0.2 end
+        b1.Position = pBase
+        b2.Position = pLeft
+        b3.Position = pRight
+        b4.Position = pTip
+    end
 end
 
 RunService.RenderStepped:Connect(function()
-    if Settings.AB_RangeVisual or Settings.AB_FacingCheck then
-        local kf = GetKillersFolder()
-        if kf then
-            for _, m in ipairs(kf:GetChildren()) do
-                if m:IsA("Model") then AB_UpdateVisual(m, m:FindFirstChild("HumanoidRootPart")) end
+    if not AB.running or not Settings.AB_ShowZone then
+        for m in pairs(AB.visual) do AB_RemoveVisual(m) end
+        return
+    end
+    local kf = GetKillersFolder()
+    if kf then
+        for _, m in ipairs(kf:GetChildren()) do
+            if m:IsA("Model") then
+                AB_UpdateVisual(m, m:FindFirstChild("HumanoidRootPart"))
             end
         end
-        for m in pairs(AB.visual) do if not m.Parent then AB_RemoveVisual(m) end end
-    else
-        for m in pairs(AB.visual) do AB_RemoveVisual(m) end
+    end
+    for m in pairs(AB.visual) do
+        if not m.Parent then AB_RemoveVisual(m) end
     end
 end)
+
+local function AB_Enable()
+    if AB.running then return end
+    AB.running = true
+    AB.attrState = {}
+    AB.inZone = {}
+    AB.lastBlock = 0
+    AB.loop = task.spawn(AB_Loop)
+end
+
+local function AB_Disable()
+    AB.running = false
+    if AB.loop then pcall(task.cancel, AB.loop); AB.loop = nil end
+    AB.attrState = {}
+    AB.inZone = {}
+    for m in pairs(AB.visual) do AB_RemoveVisual(m) end
+end
 
 --═══════════════════════════════════════════════════════════════════
 -- ANTI BAIT
@@ -549,8 +565,7 @@ local function PA_Loop()
                         if closest then
                             PA.looking = true; PA.lookStarted = tick()
                             task.spawn(function()
-                                local ok, err = pcall(PA_AimOnce, hum, root, closest)
-                                if not ok then warn("[PunchAim]", err) end
+                                pcall(PA_AimOnce, hum, root, closest)
                                 PA.looking = false; PA.lookStarted = nil
                             end)
                         end
@@ -948,13 +963,17 @@ end
 _G.Godsaken = {
     Settings = Settings,
     AutoBlock = {
-        Enable=AB_Enable, Disable=AB_Disable,
-        SetMode        = function(m) Settings.AB_Mode = m end,
-        SetBlockType   = function(t) Settings.AB_BlockType = t; table.clear(AB.playedOut); table.clear(AB.blocked) end,
-        SetRange       = function(v) Settings.AB_Range = _num(v, 15) end,
-        SetFacingCheck = function(v) Settings.AB_FacingCheck = v end,
-        SetDot         = function(v) Settings.AB_Dot = math.clamp(_num(v, 0.5), -1, 1) end,
-        SetRangeVisual = function(v) Settings.AB_RangeVisual = v end,
+        Enable          = AB_Enable,
+        Disable         = AB_Disable,
+        SetMode         = function(m) Settings.AB_Mode = m end,
+        SetFacingMode   = function(m) Settings.AB_FacingMode = m end,
+        SetShowZone     = function(v) Settings.AB_ShowZone = v end,
+        SetCircleRadius = function(v) Settings.AB_CircleRadius = _num(v, 8) end,
+        SetDotRadius    = function(v) Settings.AB_DotRadius    = _num(v, 5) end,
+        SetDotDistance  = function(v) Settings.AB_DotDistance  = _num(v, 4) end,
+        SetDiamondLength= function(v) Settings.AB_DiamondLength= _num(v, 8) end,
+        SetDiamondWidth = function(v) Settings.AB_DiamondWidth = _num(v, 4) end,
+        SetDiamondOffset= function(v) Settings.AB_DiamondOffset= _num(v, 3) end,
     },
     AntiBait = { Enable=ABT_Enable, Disable=ABT_Disable, SetDuration=function(v) Settings.ABT_Duration=_num(v,0.5) end },
     AutoParry = { Enable=AP_Enable, Disable=AP_Disable, SetDelay=function(v) Settings.AP_Delay=_num(v,0.5) end },
@@ -999,13 +1018,11 @@ _G.Godsaken = {
 -- C00LSAKEN REDLINE UI
 --═══════════════════════════════════════════════════════════════════
 local REPO = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-
-local Library       = loadstring(game:HttpGet(REPO .. "Library.lua"))()
-local ThemeManager  = loadstring(game:HttpGet(REPO .. "addons/ThemeManager.lua"))()
+local Library      = loadstring(game:HttpGet(REPO .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(REPO .. "addons/ThemeManager.lua"))()
 
 ThemeManager:SetLibrary(Library)
 ThemeManager:SetFolder("C00lsaken")
-
 ThemeManager:SetDefaultTheme({
     FontColor       = Color3.fromRGB(245, 235, 235),
     MainColor       = Color3.fromRGB(34, 15, 18),
@@ -1015,245 +1032,247 @@ ThemeManager:SetDefaultTheme({
     FontFace        = Enum.Font.Code,
     BackgroundImage = "",
 })
-
 Library.ForceCheckbox = false
 Library.ShowToggleFrameInKeybinds = true
 Library.NotifySide = "Right"
 
 local Window = Library:CreateWindow({
     Title = "C00lsaken",
-    Footer = "REDLINE  |  v1.4",
+    Footer = "REDLINE  |  v1.5",
     ToggleKeybind = Enum.KeyCode.RightControl,
-    Center = true,
-    AutoShow = true,
-    Resizable = true,
-    ShowCustomCursor = false,
-    MobileButtonsSide = "Right",
+    Center = true, AutoShow = true, Resizable = true,
+    ShowCustomCursor = false, MobileButtonsSide = "Right",
 })
 
 local Tabs = {
-    Overview     = Window:AddTab("Overview",     "layout-dashboard"),
-    AutoBlock    = Window:AddTab("Auto Block",   "shield"),
-    Survivor     = Window:AddTab("Survivor",     "swords"),
-    Killer       = Window:AddTab("Killer",       "crosshair"),
-    Visuals      = Window:AddTab("Visuals",      "eye"),
-    Appearance   = Window:AddTab("Appearance",   "palette"),
-    Credits      = Window:AddTab("Credits",      "users"),
+    Overview   = Window:AddTab("Overview",   "layout-dashboard"),
+    AutoBlock  = Window:AddTab("Auto Block", "shield"),
+    Survivor   = Window:AddTab("Survivor",   "swords"),
+    Killer     = Window:AddTab("Killer",     "crosshair"),
+    Visuals    = Window:AddTab("Visuals",    "eye"),
+    Appearance = Window:AddTab("Appearance", "palette"),
+    Credits    = Window:AddTab("Credits",    "users"),
 }
 
 --═══════════════════════════════════════════════════════════════════
--- OVERVIEW TAB
+-- OVERVIEW
 --═══════════════════════════════════════════════════════════════════
-local OverviewBox = Tabs.Overview:AddLeftGroupbox("C00LSAKEN")
-OverviewBox:AddLabel({ Text = "REDLINE INTERFACE", DoesWrap = true, Size = 16 })
-OverviewBox:AddDivider()
-OverviewBox:AddLabel({ Text = "All controls are live-wired to the backend.", DoesWrap = true })
-OverviewBox:AddLabel({ Text = "Toggle keybind: RightControl", DoesWrap = true })
+local OV = Tabs.Overview:AddLeftGroupbox("C00LSAKEN")
+OV:AddLabel({ Text = "REDLINE INTERFACE", DoesWrap = true, Size = 16 })
+OV:AddDivider()
+OV:AddLabel({ Text = "Raw attribute auto block + hi.txt facing zones", DoesWrap = true })
+OV:AddLabel({ Text = "Toggle: RightControl", DoesWrap = true })
 
-local InfoBox = Tabs.Overview:AddRightGroupbox("BUILD INFO")
-InfoBox:AddLabel("Project: C00lsaken")
-InfoBox:AddLabel("UI: Obsidian / Redline")
-InfoBox:AddLabel("Backend: Godsaken v1.3")
-InfoBox:AddLabel("Layout: Mobile + PC")
+local Info = Tabs.Overview:AddRightGroupbox("BUILD INFO")
+Info:AddLabel("Project: C00lsaken")
+Info:AddLabel("UI: Obsidian / Redline")
+Info:AddLabel("Backend: Godsaken v1.5")
+Info:AddLabel("Facing: Circle / Dot / Diamond")
 
 --═══════════════════════════════════════════════════════════════════
 -- AUTO BLOCK TAB
 --═══════════════════════════════════════════════════════════════════
-local ABMain = Tabs.AutoBlock:AddLeftGroupbox("Auto Block")
-
-ABMain:AddToggle("Enabled", {
-    Text = "Auto Block",
+local ABLeft = Tabs.AutoBlock:AddLeftGroupbox("Auto Block (Raw)")
+ABLeft:AddToggle("AB_Enable_T", {
+    Text = "Enable Auto Block",
     Default = false,
     Callback = function(v)
         if v then _G.Godsaken.AutoBlock.Enable() else _G.Godsaken.AutoBlock.Disable() end
     end,
 })
-
-ABMain:AddDropdown("BlockType", {
-    Text = "Block Type",
-    Values = { "Sound", "Animation" },
-    Default = "Sound",
-    Multi = false,
-    Callback = function(v) _G.Godsaken.AutoBlock.SetBlockType(v) end,
-})
-
-ABMain:AddDropdown("BlockMode", {
-    Text = "Mode",
+ABLeft:AddDropdown("AB_Mode_D", {
+    Text = "Block Ability",
     Values = { "Guest1337", "007n7" },
-    Default = "Guest1337",
-    Multi = false,
+    Default = "Guest1337", Multi = false,
     Callback = function(v) _G.Godsaken.AutoBlock.SetMode(v) end,
 })
-
-ABMain:AddSlider("ABRange", {
-    Text = "Range (studs)",
-    Default = 15, Min = 5, Max = 30, Rounding = 0,
-    Callback = function(v) _G.Godsaken.AutoBlock.SetRange(v) end,
+ABLeft:AddToggle("AB_ShowZone_T", {
+    Text = "Show Zone Visual",
+    Default = true,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetShowZone(v) end,
 })
 
-local ABFace = Tabs.AutoBlock:AddRightGroupbox("Facing / Visual")
+local ABRight = Tabs.AutoBlock:AddRightGroupbox("Facing Zone")
+ABRight:AddDropdown("AB_FacingMode_D", {
+    Text = "Zone Type (only one active)",
+    Values = { "Circle", "Dot", "Diamond" },
+    Default = "Circle", Multi = false,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetFacingMode(v) end,
+})
+ABRight:AddLabel({ Text = "Circle = around killer", DoesWrap = true })
+ABRight:AddLabel({ Text = "Dot = circle in front of killer", DoesWrap = true })
+ABRight:AddLabel({ Text = "Diamond = rhombus in front of killer", DoesWrap = true })
+ABRight:AddDivider()
+ABRight:AddLabel({ Text = "Editors below — only the selected type is used.", DoesWrap = true })
 
-ABFace:AddToggle("ABFacing", {
-    Text = "Facing Check",
-    Default = false,
-    Callback = function(v) _G.Godsaken.AutoBlock.SetFacingCheck(v) end,
+local ABE1 = Tabs.AutoBlock:AddLeftGroupbox("Zone Editor - Circle")
+ABE1:AddSlider("AB_CircleRadius_S", {
+    Text = "Circle Radius",
+    Default = 8, Min = 2, Max = 30, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetCircleRadius(v) end,
 })
 
-ABFace:AddSlider("ABDot", {
-    Text = "Facing Dot (higher = stricter)",
-    Default = 0.5, Min = -1, Max = 1, Rounding = 2,
-    Callback = function(v) _G.Godsaken.AutoBlock.SetDot(v) end,
+local ABE2 = Tabs.AutoBlock:AddRightGroupbox("Zone Editor - Dot")
+ABE2:AddSlider("AB_DotRadius_S", {
+    Text = "Dot Radius",
+    Default = 5, Min = 1, Max = 20, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetDotRadius(v) end,
+})
+ABE2:AddSlider("AB_DotDistance_S", {
+    Text = "Distance from Killer",
+    Default = 4, Min = 0, Max = 20, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetDotDistance(v) end,
 })
 
-ABFace:AddToggle("ABVis", {
-    Text = "Range Visual",
-    Default = false,
-    Callback = function(v) _G.Godsaken.AutoBlock.SetRangeVisual(v) end,
+local ABE3 = Tabs.AutoBlock:AddLeftGroupbox("Zone Editor - Diamond")
+ABE3:AddSlider("AB_DiamondLength_S", {
+    Text = "Length",
+    Default = 8, Min = 2, Max = 30, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetDiamondLength(v) end,
+})
+ABE3:AddSlider("AB_DiamondWidth_S", {
+    Text = "Width",
+    Default = 4, Min = 1, Max = 20, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetDiamondWidth(v) end,
+})
+ABE3:AddSlider("AB_DiamondOffset_S", {
+    Text = "Offset from Killer",
+    Default = 3, Min = 0, Max = 20, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetDiamondOffset(v) end,
 })
 
 --═══════════════════════════════════════════════════════════════════
--- SURVIVOR TAB
+-- SURVIVOR
 --═══════════════════════════════════════════════════════════════════
 local SAB = Tabs.Survivor:AddLeftGroupbox("Anti Bait")
-SAB:AddToggle("ABTEnabled", {
-    Text = "Anti Bait (Blatant)",
-    Default = false,
+SAB:AddToggle("ABT_T", {
+    Text = "Anti Bait (Blatant)", Default = false,
     Callback = function(v) if v then _G.Godsaken.AntiBait.Enable() else _G.Godsaken.AntiBait.Disable() end end,
 })
-SAB:AddSlider("ABTDuration", {
+SAB:AddSlider("ABT_Dur", {
     Text = "Duration", Default = 0.5, Min = 0, Max = 3, Rounding = 1,
     Callback = function(v) _G.Godsaken.AntiBait.SetDuration(v) end,
 })
 
 local SPB = Tabs.Survivor:AddRightGroupbox("Auto Parry & Punch Aim")
-SPB:AddToggle("APEnabled", {
+SPB:AddToggle("AP_T", {
     Text = "Auto Parry", Default = false,
     Callback = function(v) if v then _G.Godsaken.AutoParry.Enable() else _G.Godsaken.AutoParry.Disable() end end,
 })
-SPB:AddSlider("APDelay", {
+SPB:AddSlider("AP_Delay", {
     Text = "Parry Delay", Default = 0.5, Min = 0, Max = 1, Rounding = 2,
     Callback = function(v) _G.Godsaken.AutoParry.SetDelay(v) end,
 })
 SPB:AddDivider()
-SPB:AddToggle("PAEnabled", {
+SPB:AddToggle("PA_T", {
     Text = "Punch Aim", Default = false,
     Callback = function(v) if v then _G.Godsaken.PunchAim.Enable() else _G.Godsaken.PunchAim.Disable() end end,
 })
-SPB:AddSlider("PAPred", {
+SPB:AddSlider("PA_Pred", {
     Text = "Punch Prediction", Default = 4, Min = 0, Max = 20, Rounding = 0,
     Callback = function(v) _G.Godsaken.PunchAim.SetPrediction(v) end,
 })
 
 local SAim = Tabs.Survivor:AddLeftGroupbox("Survivor Auto Aim")
-SAim:AddToggle("AIMEnabled", {
+SAim:AddToggle("AIM_T", {
     Text = "Enable Auto Aim", Default = false,
     Callback = function(v) if v then _G.Godsaken.SurvivorAim.Enable() else _G.Godsaken.SurvivorAim.Disable() end end,
 })
-SAim:AddDropdown("AIMMode", {
+SAim:AddDropdown("AIM_M", {
     Text = "Aim Mode", Values = {"Character","Camera","Both"},
     Default = "Character", Multi = false,
     Callback = function(v) _G.Godsaken.SurvivorAim.SetMode(v) end,
 })
-SAim:AddSlider("AIMPred", {
+SAim:AddSlider("AIM_Pred", {
     Text = "Prediction (1-10)", Default = 4, Min = 1, Max = 10, Rounding = 0,
     Callback = function(v) _G.Godsaken.SurvivorAim.SetPrediction(v) end,
 })
-SAim:AddSlider("AIMLock", {
+SAim:AddSlider("AIM_Lock", {
     Text = "Lock Time", Default = 0.7, Min = 0.1, Max = 3, Rounding = 2,
     Callback = function(v) _G.Godsaken.SurvivorAim.SetLockTime(v) end,
 })
-SAim:AddSlider("AIMRange", {
+SAim:AddSlider("AIM_Range", {
     Text = "Range", Default = 55, Min = 5, Max = 200, Rounding = 0,
     Callback = function(v) _G.Godsaken.SurvivorAim.SetRange(v) end,
 })
-SAim:AddSlider("AIMMinDist", {
-    Text = "Min Distance", Default = 3, Min = 0, Max = 20, Rounding = 0,
-    Callback = function(v) _G.Godsaken.SurvivorAim.SetMinDist(v) end,
-})
 
-local SPattern = Tabs.Survivor:AddRightGroupbox("Trigger Patterns")
-SPattern:AddToggle("PatSlash",  { Text = "Shedletsky - Slash", Default = true,
-    Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("slash", v) end })
-SPattern:AddToggle("PatBlock",  { Text = "Guest - Block / Parry / Punch", Default = true,
-    Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("block", v) end })
-SPattern:AddToggle("PatDagger", { Text = "Two Time - Any Dagger", Default = true,
-    Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("dagger", v) end })
-SPattern:AddToggle("PatAxe",    { Text = "Jane Doe - Hatchet", Default = true,
-    Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("axe", v) end })
-SPattern:AddToggle("PatShoot",  { Text = "Chance - Shoot / Oneshot / Gun", Default = true,
-    Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("shoot", v) end })
+local SPat = Tabs.Survivor:AddRightGroupbox("Trigger Patterns")
+SPat:AddToggle("PatSlash",  { Text = "Shedletsky - Slash",            Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("slash",  v) end })
+SPat:AddToggle("PatBlock",  { Text = "Guest - Block / Parry / Punch", Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("block",  v) end })
+SPat:AddToggle("PatDagger", { Text = "Two Time - Any Dagger",         Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("dagger", v) end })
+SPat:AddToggle("PatAxe",    { Text = "Jane Doe - Hatchet",            Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("axe",    v) end })
+SPat:AddToggle("PatShoot",  { Text = "Chance - Shoot / Oneshot / Gun",Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("shoot",  v) end })
 
 --═══════════════════════════════════════════════════════════════════
--- KILLER TAB  (HDT)
+-- KILLER
 --═══════════════════════════════════════════════════════════════════
-local HBox = Tabs.Killer:AddLeftGroupbox("Hitbox Dragging Tech (HDT)")
-HBox:AddToggle("HDTEnabled", {
+local HK = Tabs.Killer:AddLeftGroupbox("Hitbox Dragging Tech (HDT)")
+HK:AddToggle("HDT_T", {
     Text = "Enable HDT", Default = false,
     Callback = function(v) if v then _G.Godsaken.HDT.Enable() else _G.Godsaken.HDT.Disable() end end,
 })
-HBox:AddSlider("HDTSpeed", {
+HK:AddSlider("HDT_Spd", {
     Text = "Speed", Default = 40, Min = 5, Max = 200, Rounding = 0,
     Callback = function(v) _G.Godsaken.HDT.SetSpeed(v) end,
 })
-HBox:AddSlider("HDTDelay", {
+HK:AddSlider("HDT_Delay", {
     Text = "Delay", Default = 0.05, Min = 0, Max = 1, Rounding = 2,
     Callback = function(v) _G.Godsaken.HDT.SetDelay(v) end,
 })
-HBox:AddSlider("HDTDuration", {
+HK:AddSlider("HDT_Dur", {
     Text = "Duration", Default = 0.6, Min = 0.1, Max = 2, Rounding = 2,
     Callback = function(v) _G.Godsaken.HDT.SetDuration(v) end,
 })
 
-local StamBox = Tabs.Killer:AddRightGroupbox("Stamina")
-StamBox:AddToggle("StamEnabled", {
+local KS = Tabs.Killer:AddRightGroupbox("Stamina")
+KS:AddToggle("Stam_T", {
     Text = "Infinite Stamina", Default = false,
     Callback = function(v) if v then _G.Godsaken.Stamina.Enable() else _G.Godsaken.Stamina.Disable() end end,
 })
 
 --═══════════════════════════════════════════════════════════════════
--- VISUALS TAB  (ESP)
+-- VISUALS
 --═══════════════════════════════════════════════════════════════════
-local ESPMain = Tabs.Visuals:AddLeftGroupbox("ESP")
-ESPMain:AddToggle("ESPKiller",    { Text = "Killer ESP (Red)",        Default = false, Callback = function(v) _G.Godsaken.ESP.SetKiller(v)    end })
-ESPMain:AddToggle("ESPSurvivor",  { Text = "Survivor ESP (Green)",    Default = false, Callback = function(v) _G.Godsaken.ESP.SetSurvivor(v)  end })
-ESPMain:AddToggle("ESPGenerator", { Text = "Generator ESP (Yellow)",  Default = false, Callback = function(v) _G.Godsaken.ESP.SetGenerator(v) end })
-ESPMain:AddToggle("ESPMedkit",    { Text = "Medkit ESP (Pink)",       Default = false, Callback = function(v) _G.Godsaken.ESP.SetMedkit(v)    end })
-ESPMain:AddToggle("ESPBloxy",     { Text = "BloxyCola ESP (Blue)",    Default = false, Callback = function(v) _G.Godsaken.ESP.SetBloxy(v)     end })
+local EM = Tabs.Visuals:AddLeftGroupbox("ESP")
+EM:AddToggle("ESPKiller",    { Text = "Killer ESP (Red)",        Default = false, Callback = function(v) _G.Godsaken.ESP.SetKiller(v)    end })
+EM:AddToggle("ESPSurvivor",  { Text = "Survivor ESP (Green)",    Default = false, Callback = function(v) _G.Godsaken.ESP.SetSurvivor(v)  end })
+EM:AddToggle("ESPGenerator", { Text = "Generator ESP (Yellow)",  Default = false, Callback = function(v) _G.Godsaken.ESP.SetGenerator(v) end })
+EM:AddToggle("ESPMedkit",    { Text = "Medkit ESP (Pink)",       Default = false, Callback = function(v) _G.Godsaken.ESP.SetMedkit(v)    end })
+EM:AddToggle("ESPBloxy",     { Text = "BloxyCola ESP (Blue)",    Default = false, Callback = function(v) _G.Godsaken.ESP.SetBloxy(v)     end })
 
-local ESPOpt = Tabs.Visuals:AddRightGroupbox("ESP Options")
-ESPOpt:AddToggle("ESPWall", {
+local EO = Tabs.Visuals:AddRightGroupbox("ESP Options")
+EO:AddToggle("ESPWall", {
     Text = "Wall Check", Default = false,
     Callback = function(v) _G.Godsaken.ESP.ToggleWall(v) end,
 })
-ESPOpt:AddSlider("ESPRange", {
+EO:AddSlider("ESPRange", {
     Text = "Max Distance", Default = 150, Min = 50, Max = 500, Rounding = 0,
     Callback = function(v) _G.Godsaken.ESP.SetRange(v) end,
 })
 
 --═══════════════════════════════════════════════════════════════════
--- APPEARANCE + CREDITS
+-- APPEARANCE / CREDITS
 --═══════════════════════════════════════════════════════════════════
-local AppearanceInfo = Tabs.Appearance:AddLeftGroupbox("REDLINE THEME")
-AppearanceInfo:AddLabel({ Text = "Deep charcoal panels, crimson accents, soft red outlines.", DoesWrap = true })
-AppearanceInfo:AddDivider()
-AppearanceInfo:AddLabel("Theme presets below.")
+local AI = Tabs.Appearance:AddLeftGroupbox("REDLINE THEME")
+AI:AddLabel({ Text = "Charcoal panels, crimson accents, soft red outlines.", DoesWrap = true })
+AI:AddDivider()
+AI:AddLabel("Theme presets below.")
 ThemeManager:ApplyToTab(Tabs.Appearance)
 
-local CreditsBox = Tabs.Credits:AddLeftGroupbox("CREDITS")
-CreditsBox:AddLabel({ Text = "Coding & Owner: c00lkid / random_dude", DoesWrap = true })
-CreditsBox:AddLabel({ Text = "Helpers: Viltrumite & Ivy", DoesWrap = true })
-CreditsBox:AddDivider()
-CreditsBox:AddLabel({ Text = "Viltrumite: helped with some features.", DoesWrap = true })
-CreditsBox:AddLabel({ Text = "Ivy: provided feedback and assistance.", DoesWrap = true })
+local CB = Tabs.Credits:AddLeftGroupbox("CREDITS")
+CB:AddLabel({ Text = "Coding & Owner: c00lkid / random_dude", DoesWrap = true })
+CB:AddLabel({ Text = "Helpers: Viltrumite & Ivy", DoesWrap = true })
+CB:AddDivider()
+CB:AddLabel({ Text = "Viltrumite: helped with some features.", DoesWrap = true })
+CB:AddLabel({ Text = "Ivy: provided feedback and assistance.", DoesWrap = true })
 
-local AboutBox = Tabs.Credits:AddRightGroupbox("ABOUT")
-AboutBox:AddLabel({ Text = "C00lsaken Redline", Size = 16 })
-AboutBox:AddLabel({ Text = "Godsaken v1.3 backend + Obsidian Redline UI.", DoesWrap = true })
+local AbBox = Tabs.Credits:AddRightGroupbox("ABOUT")
+AbBox:AddLabel({ Text = "C00lsaken Redline", Size = 16 })
+AbBox:AddLabel({ Text = "Raw auto block + Circle/Dot/Diamond facing zones.", DoesWrap = true })
 
 ThemeManager:LoadDefault()
 
 Library:OnUnload(function()
-    -- Kill all features on UI unload
     pcall(function() _G.Godsaken.AutoBlock.Disable() end)
     pcall(function() _G.Godsaken.AntiBait.Disable()  end)
     pcall(function() _G.Godsaken.AutoParry.Disable() end)
@@ -1261,14 +1280,12 @@ Library:OnUnload(function()
     pcall(function() _G.Godsaken.HDT.Disable()       end)
     pcall(function() _G.Godsaken.SurvivorAim.Disable() end)
     pcall(function() _G.Godsaken.Stamina.Disable()   end)
-    print("[C00lsaken] UI unloaded, all features stopped.")
 end)
 
 Library:Notify({
-    Title = "C00lsaken",
-    Description = "Redline UI loaded — all features wired.",
+    Title = "C00lsaken v1.5",
+    Description = "Raw auto block + Circle/Dot/Diamond zones loaded.",
     Time = 4,
 })
 
-print("[C00lsaken] Redline UI loaded.")
-print("[Godsaken v1.3] Backend ready.")
+print("[C00lsaken v1.5] UI + backend loaded.")
