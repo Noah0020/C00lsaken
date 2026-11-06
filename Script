@@ -52,9 +52,10 @@ local Gui = Create("ScreenGui", {
     DisplayOrder = 100
 }, PlayerGui)
 
+-- SMALLER WINDOW
 local Main = Create("Frame", {
-    Size = UDim2.new(0, 560, 0, 400),
-    Position = UDim2.new(0.5, -280, 0.5, -200),
+    Size = UDim2.new(0, 470, 0, 340),
+    Position = UDim2.new(0.5, -235, 0.5, -170),
     BackgroundColor3 = C.Black,
     BorderSizePixel = 0,
     Active = true
@@ -63,7 +64,7 @@ Corner(Main, 7)
 Stroke(Main, C.Yellow, 2)
 
 local Header = Create("Frame", {
-    Size = UDim2.new(1, 0, 0, 48),
+    Size = UDim2.new(1, 0, 0, 42),
     BackgroundColor3 = C.Panel,
     BorderSizePixel = 0
 }, Main)
@@ -71,22 +72,22 @@ Corner(Header, 7)
 
 Create("TextLabel", {
     BackgroundTransparency = 1,
-    Position = UDim2.new(0, 15, 0, 0),
-    Size = UDim2.new(0, 280, 1, 0),
+    Position = UDim2.new(0, 12, 0, 0),
+    Size = UDim2.new(0, 250, 1, 0),
     Text = "C00LSAKEN // 2077",
     TextColor3 = C.Yellow,
-    TextSize = 20,
+    TextSize = 18,
     Font = Enum.Font.GothamBlack,
     TextXAlignment = Enum.TextXAlignment.Left
 }, Header)
 
 local Close = Create("TextButton", {
-    Position = UDim2.new(1, -43, 0, 7),
-    Size = UDim2.new(0, 32, 0, 32),
+    Position = UDim2.new(1, -38, 0, 6),
+    Size = UDim2.new(0, 30, 0, 30),
     BackgroundColor3 = C.Red,
     Text = "X",
     TextColor3 = C.White,
-    TextSize = 16,
+    TextSize = 15,
     Font = Enum.Font.GothamBlack
 }, Header)
 Corner(Close, 5)
@@ -119,18 +120,18 @@ end
 MakeDraggable(Main, Header)
 
 local Navigation = Create("Frame", {
-    Position = UDim2.new(0, 10, 0, 58),
-    Size = UDim2.new(0, 130, 1, -68),
+    Position = UDim2.new(0, 8, 0, 50),
+    Size = UDim2.new(0, 112, 1, -58),
     BackgroundColor3 = C.Panel,
     BorderSizePixel = 0
 }, Main)
 Corner(Navigation, 5)
-Create("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder }, Navigation)
-Create("UIPadding", { PaddingTop = UDim.new(0, 9), PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7) }, Navigation)
+Create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, Navigation)
+Create("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6) }, Navigation)
 
 local Content = Create("Frame", {
-    Position = UDim2.new(0, 150, 0, 58),
-    Size = UDim2.new(1, -160, 1, -68),
+    Position = UDim2.new(0, 128, 0, 50),
+    Size = UDim2.new(1, -136, 1, -58),
     BackgroundColor3 = C.Panel,
     BorderSizePixel = 0,
     ClipsDescendants = true
@@ -138,12 +139,12 @@ local Content = Create("Frame", {
 Corner(Content, 5)
 
 local Reopen = Create("TextButton", {
-    Size = UDim2.new(0, 65, 0, 55),
-    Position = UDim2.new(0, 20, 0.5, -27),
+    Size = UDim2.new(0, 58, 0, 50),
+    Position = UDim2.new(0, 20, 0.5, -25),
     BackgroundColor3 = C.Black,
     Text = "CS",
     TextColor3 = C.Yellow,
-    TextSize = 22,
+    TextSize = 20,
     Font = Enum.Font.GothamBlack,
     Visible = false,
     Active = true
@@ -167,13 +168,13 @@ local function CreatePage(name)
         CanvasSize = UDim2.new(0, 0, 0, 0),
         Visible = false
     }, Content)
-    local Layout = Create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, Page)
+    local Layout = Create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, Page)
     Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        Page.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 20)
+        Page.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 16)
     end)
     Create("UIPadding", {
-        PaddingTop = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12),
-        PaddingRight = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12)
+        PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10),
+        PaddingRight = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10)
     }, Page)
     Pages[name] = Page
     return Page
@@ -190,11 +191,11 @@ end
 
 local function AddTab(name)
     local Button = Create("TextButton", {
-        Size = UDim2.new(1, 0, 0, 34),
+        Size = UDim2.new(1, 0, 0, 30),
         BackgroundColor3 = C.Panel2,
         Text = "  " .. name,
         TextColor3 = C.White,
-        TextSize = 13,
+        TextSize = 12,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left,
         AutoButtonColor = false
@@ -207,11 +208,11 @@ end
 
 local function AddHeading(page, text)
     return Create("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 30),
+        Size = UDim2.new(1, 0, 0, 26),
         BackgroundTransparency = 1,
         Text = text,
         TextColor3 = C.Yellow,
-        TextSize = 17,
+        TextSize = 15,
         Font = Enum.Font.GothamBlack,
         TextXAlignment = Enum.TextXAlignment.Left
     }, page)
@@ -219,11 +220,11 @@ end
 
 local function AddInfo(page, text)
     local Info = Create("TextLabel", {
-        Size = UDim2.new(1, -5, 0, 45),
+        Size = UDim2.new(1, -4, 0, 38),
         BackgroundColor3 = C.Panel2,
         Text = "  " .. text,
         TextColor3 = C.Grey,
-        TextSize = 12,
+        TextSize = 11,
         Font = Enum.Font.GothamMedium,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left
@@ -234,28 +235,28 @@ end
 
 local function AddToggle(page, text, default, callback)
     local Row = Create("Frame", {
-        Size = UDim2.new(1, -5, 0, 43),
+        Size = UDim2.new(1, -4, 0, 38),
         BackgroundColor3 = C.Panel2,
         BorderSizePixel = 0
     }, page)
     Corner(Row, 5)
     Create("TextLabel", {
-        Position = UDim2.new(0, 12, 0, 0),
-        Size = UDim2.new(1, -90, 1, 0),
+        Position = UDim2.new(0, 10, 0, 0),
+        Size = UDim2.new(1, -80, 1, 0),
         BackgroundTransparency = 1,
         Text = text,
         TextColor3 = C.White,
-        TextSize = 14,
+        TextSize = 13,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left
     }, Row)
     local Toggle = Create("TextButton", {
-        Position = UDim2.new(1, -65, 0.5, -13),
-        Size = UDim2.new(0, 53, 0, 26),
+        Position = UDim2.new(1, -58, 0.5, -11),
+        Size = UDim2.new(0, 48, 0, 22),
         BackgroundColor3 = default and C.Green or C.Red,
         Text = default and "ON" or "OFF",
         TextColor3 = default and C.Black or C.White,
-        TextSize = 11,
+        TextSize = 10,
         Font = Enum.Font.GothamBlack,
         AutoButtonColor = false
     }, Row)
@@ -273,28 +274,28 @@ end
 
 local function AddInput(page, text, default, callback)
     local Row = Create("Frame", {
-        Size = UDim2.new(1, -5, 0, 43),
+        Size = UDim2.new(1, -4, 0, 38),
         BackgroundColor3 = C.Panel2,
         BorderSizePixel = 0
     }, page)
     Corner(Row, 5)
     Create("TextLabel", {
-        Position = UDim2.new(0, 12, 0, 0),
-        Size = UDim2.new(0.5, -12, 1, 0),
+        Position = UDim2.new(0, 10, 0, 0),
+        Size = UDim2.new(0.5, -10, 1, 0),
         BackgroundTransparency = 1,
         Text = text,
         TextColor3 = C.White,
-        TextSize = 13,
+        TextSize = 12,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left
     }, Row)
     local Box = Create("TextBox", {
-        Position = UDim2.new(0.55, 0, 0.5, -13),
-        Size = UDim2.new(0.4, 0, 0, 26),
+        Position = UDim2.new(0.55, 0, 0.5, -11),
+        Size = UDim2.new(0.4, 0, 0, 22),
         BackgroundColor3 = C.Black,
         Text = tostring(default or ""),
         TextColor3 = C.Yellow,
-        TextSize = 13,
+        TextSize = 12,
         Font = Enum.Font.GothamBold,
         PlaceholderText = "...",
         PlaceholderColor3 = C.Grey,
@@ -309,34 +310,34 @@ end
 
 local function AddSlider(page, text, min, max, default, callback)
     local Row = Create("Frame", {
-        Size = UDim2.new(1, -5, 0, 55),
+        Size = UDim2.new(1, -4, 0, 50),
         BackgroundColor3 = C.Panel2,
         BorderSizePixel = 0
     }, page)
     Corner(Row, 5)
     Create("TextLabel", {
-        Position = UDim2.new(0, 12, 0, 4),
-        Size = UDim2.new(1, -100, 0, 20),
+        Position = UDim2.new(0, 10, 0, 2),
+        Size = UDim2.new(1, -90, 0, 18),
         BackgroundTransparency = 1,
         Text = text,
         TextColor3 = C.White,
-        TextSize = 13,
+        TextSize = 12,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left
     }, Row)
     local ValueLbl = Create("TextLabel", {
-        Position = UDim2.new(1, -80, 0, 4),
-        Size = UDim2.new(0, 68, 0, 20),
+        Position = UDim2.new(1, -70, 0, 2),
+        Size = UDim2.new(0, 60, 0, 18),
         BackgroundTransparency = 1,
         Text = tostring(default),
         TextColor3 = C.Yellow,
-        TextSize = 13,
+        TextSize = 12,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Right
     }, Row)
     local Bar = Create("Frame", {
-        Position = UDim2.new(0, 12, 0, 34),
-        Size = UDim2.new(1, -24, 0, 8),
+        Position = UDim2.new(0, 10, 0, 30),
+        Size = UDim2.new(1, -20, 0, 8),
         BackgroundColor3 = C.Black,
         BorderSizePixel = 0
     }, Row)
@@ -387,22 +388,27 @@ local State = {
     -- ESP
     KillerESP = false, SurvivorESP = false, MedkitESP = false,
     BloxyESP = false, GeneratorESP = false,
-    FacingVisual = true, DetectionVisual = false,
+    FacingVisual = true, DetectionVisual = true,
     -- Stam
     InfiniteStamina = false, MaxStamina = 100, SprintSpeed = 20,
     StaminaGain = 10, StaminaDrain = 1, RegenDelay = 0.5,
     -- Auto Block
-    AutoBlock = false, BlockDelay = 0, DetectionRange = 18,
+    AutoBlock = false, AutoBlockBox = false,  -- circle by default
+    BlockDelay = 0, DetectionRange = 18,
     WallCheck = false, BlockMode = "Guest1337",
     MessageOnBlock = false, BlockMessage = "",
     -- HDT
-    HDTEnabled = false, HDTSpeed = 40, HDTDelay = 0.05, HDTDuration = 0.6,
+    HDTEnabled = false, HDTSpeed = 9, HDTDelay = 0.05, HDTDuration = 0.6,
     -- Aimbot / Punch
     Aimbot = false, CharLock = false, CamLock = false,
     AimDelay = 0.3, AimMinDistance = 15, AimLockDuration = 0.8, AimPrediction = 4,
     AutoPunch = false,
-    -- Visuals
-    ShowBox = true, ShowCone = true
+    -- Visual sizes (editable)
+    ShowBox = true, ShowCone = true,
+    BoxWidth = 4, BoxHeight = 4, BoxLength = 6,
+    ConeLength = 8, ConeWidth = 6,
+    -- Facing check
+    FacingCheckThreshold = 0.3
 }
 
 -- ============ REMOTE & HELPERS ============
@@ -416,9 +422,8 @@ local function FireBlock() FireAbility("Block") end
 local function FireClone() FireAbility("Clone") end
 local function FirePunch() FireAbility("Punch") end
 
--- Facing check (ALWAYS ACTIVE)
-local function IsFacing(localRoot, killerRoot, dotThreshold)
-    dotThreshold = dotThreshold or 0.3
+-- Facing check — ALWAYS ACTIVE, no toggle needed
+local function IsFacing(localRoot, killerRoot)
     if not localRoot or not killerRoot then return false end
     local dx = localRoot.Position.X - killerRoot.Position.X
     local dz = localRoot.Position.Z - killerRoot.Position.Z
@@ -430,7 +435,7 @@ local function IsFacing(localRoot, killerRoot, dotThreshold)
     local lmag = math.sqrt(lx*lx + lz*lz)
     if lmag < 0.01 then return true end
     lx, lz = lx/lmag, lz/lmag
-    return (lx*ux + lz*uz) > dotThreshold
+    return (lx*ux + lz*uz) > (State.FacingCheckThreshold or 0.3)
 end
 
 local function HasWallBetween(fromPos, toPos, excludeModel)
@@ -462,7 +467,20 @@ local function GetNearestKiller()
     return bestRoot, best
 end
 
--- ============ ESP (from meowsaken) ============
+-- Box / Cone CF (ALWAYS in front of killer, no offset)
+local function CalcRectCF(kr)
+    local p = kr.Position
+    local lv = kr.CFrame.LookVector
+    local f = Vector3.new(lv.X, 0, lv.Z)
+    if f.Magnitude < 0.01 then f = Vector3.new(0, 0, -1) else f = f.Unit end
+    return CFrame.lookAt(p, p + f)
+end
+
+local function GetRectSize()
+    return Vector3.new(State.BoxWidth, State.BoxHeight, State.BoxLength)
+end
+
+-- ============ ESP ============
 local killerHighlights = {}
 local function clearKillerHighlights()
     for _, h in ipairs(killerHighlights) do if h and h.Parent then h:Destroy() end end
@@ -619,56 +637,61 @@ task.spawn(function()
     end
 end)
 
--- Facing visual (always on for killer) + detection circle
+-- Facing visual + Detection circle AROUND PLAYER
 local facingVisuals = {}
-local detectCircles = {}
+local playerCircle = nil
 
 RunService.RenderStepped:Connect(function()
-    if not KillersFolder then return end
-    local existing = {}
-    for _, killer in ipairs(KillersFolder:GetChildren()) do
-        if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
-            existing[killer] = true
-            local hrp = killer.HumanoidRootPart
-            if State.FacingVisual and not facingVisuals[killer] then
-                local v = Instance.new("CylinderHandleAdornment")
-                v.Adornee = hrp
-                v.Color3 = Color3.fromRGB(255, 200, 0)
-                v.AlwaysOnTop = true
-                v.ZIndex = 2
-                v.Transparency = 0.75
-                v.Radius = State.DetectionRange * 0.5
-                v.Height = 0.08
-                v.CFrame = CFrame.new(0, -(hrp.Size.Y/2 + 0.05), 0) * CFrame.Angles(math.rad(90), 0, 0)
-                v.Parent = hrp
-                facingVisuals[killer] = v
-            elseif not State.FacingVisual and facingVisuals[killer] then
-                facingVisuals[killer]:Destroy()
-                facingVisuals[killer] = nil
-            end
-            if State.DetectionVisual and not detectCircles[killer] then
-                local c = Instance.new("CylinderHandleAdornment")
-                c.Adornee = hrp
-                c.Color3 = Color3.fromRGB(255, 255, 0)
-                c.AlwaysOnTop = true
-                c.ZIndex = 1
-                c.Transparency = 0.6
-                c.Radius = State.DetectionRange
-                c.Height = 0.12
-                c.CFrame = CFrame.new(0, -(hrp.Size.Y/2 + 0.05), 0) * CFrame.Angles(math.rad(90), 0, 0)
-                c.Parent = hrp
-                detectCircles[killer] = c
-            elseif not State.DetectionVisual and detectCircles[killer] then
-                detectCircles[killer]:Destroy()
-                detectCircles[killer] = nil
+    -- Facing visuals for each killer
+    if KillersFolder then
+        local existing = {}
+        for _, killer in ipairs(KillersFolder:GetChildren()) do
+            if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
+                existing[killer] = true
+                local hrp = killer.HumanoidRootPart
+                if State.FacingVisual and not facingVisuals[killer] then
+                    local v = Instance.new("CylinderHandleAdornment")
+                    v.Adornee = hrp
+                    v.Color3 = Color3.fromRGB(255, 200, 0)
+                    v.AlwaysOnTop = true
+                    v.ZIndex = 2
+                    v.Transparency = 0.75
+                    v.Radius = State.DetectionRange * 0.5
+                    v.Height = 0.08
+                    v.CFrame = CFrame.new(0, -(hrp.Size.Y/2 + 0.05), 0) * CFrame.Angles(math.rad(90), 0, 0)
+                    v.Parent = hrp
+                    facingVisuals[killer] = v
+                elseif not State.FacingVisual and facingVisuals[killer] then
+                    facingVisuals[killer]:Destroy()
+                    facingVisuals[killer] = nil
+                end
             end
         end
+        for k, v in pairs(facingVisuals) do if not existing[k] then v:Destroy(); facingVisuals[k] = nil end end
     end
-    for k, v in pairs(facingVisuals) do if not existing[k] then v:Destroy(); facingVisuals[k] = nil end end
-    for k, c in pairs(detectCircles) do if not existing[k] then c:Destroy(); detectCircles[k] = nil end end
+
+    -- Detection circle AROUND PLAYER
+    local myRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+    if State.DetectionVisual and myRoot then
+        if not playerCircle or playerCircle.Parent ~= myRoot then
+            if playerCircle then playerCircle:Destroy() end
+            playerCircle = Instance.new("CylinderHandleAdornment")
+            playerCircle.Adornee = myRoot
+            playerCircle.Color3 = Color3.fromRGB(0, 229, 255)
+            playerCircle.AlwaysOnTop = true
+            playerCircle.ZIndex = 1
+            playerCircle.Transparency = 0.6
+            playerCircle.Height = 0.12
+            playerCircle.CFrame = CFrame.new(0, -(myRoot.Size.Y/2 + 0.05), 0) * CFrame.Angles(math.rad(90), 0, 0)
+            playerCircle.Parent = myRoot
+        end
+        playerCircle.Radius = State.DetectionRange
+    else
+        if playerCircle then playerCircle:Destroy(); playerCircle = nil end
+    end
 end)
 
--- ============ STAMINA (from meowsaken) ============
+-- ============ STAMINA ============
 local sprintModule = nil
 pcall(function()
     sprintModule = require(ReplicatedStorage:WaitForChild("Systems"):WaitForChild("Character"):WaitForChild("Game"):WaitForChild("Sprinting"))
@@ -680,7 +703,6 @@ if sprintModule then
     if State.StaminaGain == 10 then State.StaminaGain = sprintModule.StaminaGain or 10 end
 end
 
-local staminaThread = nil
 task.spawn(function()
     while true do
         task.wait(0.05)
@@ -697,8 +719,22 @@ task.spawn(function()
     end
 end)
 
--- ============ AUTO BLOCK (from skidsaken) ============
+-- ============ AUTO BLOCK ============
 local AB = { running=false, conn=nil, attrStates={}, attrDebounce=0 }
+
+local function InCircleRange(kr, myRoot)
+    return (kr.Position - myRoot.Position).Magnitude <= State.DetectionRange
+end
+
+local function InBoxRange(kr, myPos)
+    local cf = CalcRectCF(kr)
+    local size = GetRectSize()
+    local hw = size.X/2 + 1.5
+    local hl = size.Z/2 + 1.5
+    local hh = size.Y/2 + 1.5
+    local lp = cf:PointToObjectSpace(myPos)
+    return math.abs(lp.X) <= hw and math.abs(lp.Z) <= hl and math.abs(lp.Y) <= hh
+end
 
 local function AttrHeartbeat()
     if not AB.running or not KillersFolder then return end
@@ -727,14 +763,19 @@ local function AttrHeartbeat()
                                 st.isBait = false
                             else
                                 st.castLockUntil = n + 0.25
-                                local dist = (myRoot.Position - kr.Position).Magnitude
-                                if dist <= State.DetectionRange then
-                                    -- FACING CHECK ALWAYS ON
+                                local inRange
+                                if State.AutoBlockBox then
+                                    inRange = InBoxRange(kr, myRoot.Position)
+                                else
+                                    inRange = InCircleRange(kr, myRoot)
+                                end
+                                if inRange then
+                                    -- Facing check ALWAYS ACTIVE
                                     local facing = IsFacing(myRoot, kr)
                                     local wallOk = not State.WallCheck or not HasWallBetween(kr.Position, myRoot.Position, k)
                                     if facing and wallOk and (n - AB.attrDebounce) >= 0.15 then
                                         AB.attrDebounce = n
-                                        task.wait(State.BlockDelay)
+                                        if State.BlockDelay > 0 then task.wait(State.BlockDelay) end
                                         if State.BlockMode == "007n7" then FireClone() else FireBlock() end
                                         if State.MessageOnBlock and State.BlockMessage ~= "" then
                                             pcall(function()
@@ -771,8 +812,8 @@ local function StopAutoBlock()
     AB.attrStates = {}
 end
 
--- ============ HDT (from skidsaken) ============
-local HDT = { enabled=false, speed=40, delay=0.05, duration=0.6, debounce=false, lastDamage=0,
+-- ============ HDT ============
+local HDT = { enabled=false, speed=9, delay=0.05, duration=0.6, debounce=false, lastDamage=0,
     WC=nil, CH=nil, RT=nil, CA=nil, BIND="HDT_Bind" }
 local HDT_ANIMS = { ["72722244508749"]=true, ["96959123077498"]=true, ["95802026624883"]=true, ["140671644163156"]=true, ["100926346851492"]=true }
 
@@ -902,7 +943,7 @@ if Player.Character then
     end
 end
 
--- ============ AIMBOT (from skidsaken) ============
+-- ============ AIMBOT ============
 local Aimbot = { enabled=false, active=false, conn=nil, charConn=nil, retryTask=nil, animator=nil, lastTrigger={} }
 local AIMBOT_PUNCH = {
     "87259391926321","99100240941590","72685103823181","81905101227053","113936304594883",
@@ -1001,7 +1042,7 @@ local function AimbotStop()
     if h then pcall(function() h.AutoRotate = true end) end
 end
 
--- ============ AUTO PUNCH (from skidsaken) ============
+-- ============ AUTO PUNCH ============
 local BlockSuccessSounds = {
     ["rbxassetid://132298811847315"]=true,["rbxassetid://81114852524420"]=true,
     ["rbxassetid://123825742002486"]=true,["rbxassetid://116616310968045"]=true,
@@ -1059,30 +1100,17 @@ end
 if Player.Character then MonitorBlockSuccess(Player.Character) end
 Player.CharacterAdded:Connect(MonitorBlockSuccess)
 
--- ============ BOX (Rectangle hitbox, always in front, no offset) ============
+-- ============ BOX VISUAL ============
 local Rectangle = { folder=nil, boxes={}, loop=nil }
 local RECT_THICK = 0.1
 
 local function EnsureRectFolder()
     if not Rectangle.folder or not Rectangle.folder.Parent then
         local f = Instance.new("Folder")
-        f.Name = "RectangleBoxVisuals"
+        f.Name = "BoxVisuals"
         f.Parent = Workspace
         Rectangle.folder = f
     end
-end
-
--- ALWAYS in front of killer, no offset (0)
-local function CalcRectCF(kr)
-    local p = kr.Position
-    local lv = kr.CFrame.LookVector
-    local f = Vector3.new(lv.X, 0, lv.Z)
-    if f.Magnitude < 0.01 then f = Vector3.new(0, 0, -1) else f = f.Unit end
-    return CFrame.lookAt(p, p + f)
-end
-
-local function GetRectSize()
-    return Vector3.new(4, 4, 6)
 end
 
 local function BuildBoxEdges(box, cf, size)
@@ -1118,13 +1146,13 @@ local function BuildBoxEdges(box, cf, size)
     end
 end
 
-local function CreateBox(k, color)
+local function CreateBox(k)
     if not k or not k.Parent then return nil end
     local kr = k:FindFirstChild("HumanoidRootPart")
     if not kr then return nil end
     EnsureRectFolder()
     local m = Instance.new("Model")
-    m.Name = "RectBox"
+    m.Name = "Box"
     m.Parent = Rectangle.folder
     local edges = {}
     for i = 1, 12 do
@@ -1136,14 +1164,14 @@ local function CreateBox(k, color)
         e.CanTouch = false
         e.CastShadow = false
         e.Material = Enum.Material.Neon
-        e.Color = color
+        e.Color = Color3.fromRGB(175, 150, 220)
         e.Transparency = 0.2
         e.Size = Vector3.new(RECT_THICK, RECT_THICK, 1)
         e.CFrame = CFrame.new(0, -5000, 0)
         e.Parent = m
         edges[i] = e
     end
-    local box = { model=m, edges=edges, killer=k, color=color }
+    local box = { model=m, edges=edges, killer=k }
     BuildBoxEdges(box, CalcRectCF(kr), GetRectSize())
     return box
 end
@@ -1157,7 +1185,7 @@ local function ClearBoxes()
     Rectangle.boxes = {}
 end
 
-local function EnsureRectLoop()
+local function EnsureBoxLoop()
     if Rectangle.loop then return end
     Rectangle.loop = RunService.RenderStepped:Connect(function()
         if not State.ShowBox then
@@ -1171,10 +1199,10 @@ local function EnsureRectLoop()
                     seen[k] = true
                     local kr = k:FindFirstChild("HumanoidRootPart")
                     if kr then
-                        local box = Rectangle.boxes[1] and nil
+                        local box = nil
                         for _, b in ipairs(Rectangle.boxes) do if b.killer == k then box = b; break end end
                         if not box then
-                            box = CreateBox(k, Color3.fromRGB(175, 150, 220))
+                            box = CreateBox(k)
                             if box then table.insert(Rectangle.boxes, box) end
                         else
                             BuildBoxEdges(box, CalcRectCF(kr), GetRectSize())
@@ -1193,15 +1221,13 @@ local function EnsureRectLoop()
     end)
 end
 
-local function StopRectLoop()
+local function StopBoxLoop()
     if Rectangle.loop then pcall(function() Rectangle.loop:Disconnect() end); Rectangle.loop = nil end
     ClearBoxes()
 end
 
--- ============ CONE (diamond renamed, always in front, no offset) ============
+-- ============ CONE VISUAL ============
 local Cone = { folder=nil, zones={}, loop=nil }
-local CONE_LENGTH = 8
-local CONE_WIDTH = 6
 
 local function GetFlatLook(kr)
     local lv = kr.CFrame.LookVector
@@ -1213,7 +1239,7 @@ end
 
 local function BuildConeZone(k)
     local m = Instance.new("Model")
-    m.Name = "ConeZone_"..k.Name
+    m.Name = "Cone_"..k.Name
     m.Parent = Cone.folder
     local edges = {}
     for i = 1, 4 do
@@ -1238,9 +1264,8 @@ end
 local function UpdateConeZone(z, kr)
     if not z or not z.model or not z.model.Parent or not kr then return end
     local dCF = GetFlatLook(kr)
-    local L = CONE_LENGTH
-    local W = CONE_WIDTH
-    -- No offset: starts at killer position
+    local L = State.ConeLength
+    local W = State.ConeWidth
     local wA = dCF:PointToWorldSpace(Vector3.new(0, 0, 0))
     local wB = dCF:PointToWorldSpace(Vector3.new(0, 0, -L))
     local wC = dCF:PointToWorldSpace(Vector3.new(-W/2, 0, -L/2))
@@ -1266,7 +1291,7 @@ local function EnsureConeLoop()
     if Cone.loop then return end
     if not Cone.folder or not Cone.folder.Parent then
         local f = Instance.new("Folder")
-        f.Name = "ConeZoneVisuals"
+        f.Name = "ConeVisuals"
         f.Parent = Workspace
         Cone.folder = f
     end
@@ -1311,7 +1336,7 @@ local function StopConeLoop()
 end
 
 -- ============ TABS ============
-for _, name in ipairs({"OVERVIEW", "ESP", "STAM", "AUTO BLOCK", "BOX", "HDT", "AIM/PUNCH", "CREDITS"}) do
+for _, name in ipairs({"OVERVIEW", "ESP", "STAM", "AUTO BLOCK", "VISUALS", "HDT", "AIM/PUNCH", "CREDITS"}) do
     AddTab(name)
 end
 
@@ -1321,7 +1346,7 @@ AddHeading(Overview, "SYSTEM OVERVIEW")
 AddInfo(Overview, "C00LSAKEN 2077 // COMBINED SYSTEMS")
 AddInfo(Overview, "FEATURES: ESP, STAM, AUTO BLOCK, BOX, CONE, HDT, AIM/PUNCH")
 AddInfo(Overview, "FACING CHECK: ALWAYS ACTIVE (no toggle needed)")
-AddInfo(Overview, "CONE + BOX: ALWAYS IN FRONT OF KILLER (no offset)")
+AddInfo(Overview, "BOX + CONE: ALWAYS in front of killer")
 
 -- ESP
 local ESP = Pages["ESP"]
@@ -1347,8 +1372,8 @@ AddToggle(ESP, "Generator ESP", false, function(v)
     scanGenerators()
 end)
 AddHeading(ESP, "KILLER VISUALS")
-AddToggle(ESP, "Facing Visual", true, function(v) State.FacingVisual = v end)
-AddToggle(ESP, "Detection Range Visual", false, function(v) State.DetectionVisual = v end)
+AddToggle(ESP, "Facing Check Visual", true, function(v) State.FacingVisual = v end)
+AddToggle(ESP, "Detection Circle (Around You)", true, function(v) State.DetectionVisual = v end)
 
 -- STAM
 local STAM = Pages["STAM"]
@@ -1363,32 +1388,40 @@ AddSlider(STAM, "Regen Delay", 0, 10, State.RegenDelay, function(v) State.RegenD
 -- AUTO BLOCK
 local ABtab = Pages["AUTO BLOCK"]
 AddHeading(ABtab, "AUTO BLOCK")
-AddToggle(ABtab, "Auto Block", false, function(v)
+AddToggle(ABtab, "Auto Block (Circle Default)", false, function(v)
     State.AutoBlock = v
     if v then StartAutoBlock() else StopAutoBlock() end
 end)
+AddToggle(ABtab, "Switch to Box Mode", false, function(v) State.AutoBlockBox = v end)
+AddHeading(ABtab, "SETTINGS")
 AddToggle(ABtab, "Wall Check", false, function(v) State.WallCheck = v end)
 AddInput(ABtab, "Block Delay", "0", function(v) State.BlockDelay = tonumber(v) or 0 end)
 AddInput(ABtab, "Detection Range", "18", function(v) State.DetectionRange = tonumber(v) or 18 end)
+AddInput(ABtab, "Facing Dot Threshold", "0.3", function(v) State.FacingCheckThreshold = tonumber(v) or 0.3 end)
 AddHeading(ABtab, "BLOCK MODE")
 AddToggle(ABtab, "Use 007n7 (Clone)", false, function(v) State.BlockMode = v and "007n7" or "Guest1337" end)
 AddHeading(ABtab, "MESSAGES")
 AddToggle(ABtab, "Message on Block", false, function(v) State.MessageOnBlock = v end)
 AddInput(ABtab, "Block Message", "", function(v) State.BlockMessage = v end)
 
--- BOX
-local BOXtab = Pages["BOX"]
-AddHeading(BOXtab, "HITBOX VISUALS")
-AddToggle(BOXtab, "Show Box (Rectangle)", true, function(v)
+-- VISUALS
+local VIS = Pages["VISUALS"]
+AddHeading(VIS, "HITBOX VISUALS")
+AddToggle(VIS, "Show Box", true, function(v)
     State.ShowBox = v
-    if v then EnsureRectLoop() else StopRectLoop() end
+    if v then EnsureBoxLoop() else StopBoxLoop() end
 end)
-AddToggle(BOXtab, "Show Cone", true, function(v)
+AddToggle(VIS, "Show Cone", true, function(v)
     State.ShowCone = v
     if v then EnsureConeLoop() else StopConeLoop() end
 end)
-AddInfo(BOXtab, "Box and Cone are ALWAYS shown in front of the killer.")
-AddInfo(BOXtab, "No offset needed - automatic positioning.")
+AddHeading(VIS, "BOX SIZE")
+AddInput(VIS, "Box Width", "4", function(v) State.BoxWidth = tonumber(v) or 4 end)
+AddInput(VIS, "Box Height", "4", function(v) State.BoxHeight = tonumber(v) or 4 end)
+AddInput(VIS, "Box Length", "6", function(v) State.BoxLength = tonumber(v) or 6 end)
+AddHeading(VIS, "CONE SIZE")
+AddInput(VIS, "Cone Length", "8", function(v) State.ConeLength = tonumber(v) or 8 end)
+AddInput(VIS, "Cone Width", "6", function(v) State.ConeWidth = tonumber(v) or 6 end)
 
 -- HDT
 local HDTtab = Pages["HDT"]
@@ -1396,7 +1429,7 @@ AddHeading(HDTtab, "HDT SYSTEM")
 AddToggle(HDTtab, "HDT Enabled", false, function(v)
     if v then HDT_Start() else HDT_Stop() end
 end)
-AddInput(HDTtab, "Speed", "40", function(v) HDT.speed = tonumber(v) or 40 end)
+AddInput(HDTtab, "Speed", "9", function(v) HDT.speed = tonumber(v) or 9 end)
 AddInput(HDTtab, "Delay", "0.05", function(v) HDT.delay = tonumber(v) or 0.05 end)
 AddInput(HDTtab, "Duration", "0.6", function(v) HDT.duration = tonumber(v) or 0.6 end)
 AddInfo(HDTtab, "HDT dashes you toward the killer when their hit animation plays.")
@@ -1415,7 +1448,7 @@ AddInput(AIMtab, "Lock Duration", "0.8", function(v) State.AimLockDuration = ton
 AddInput(AIMtab, "Prediction", "4", function(v) State.AimPrediction = tonumber(v) or 4 end)
 AddHeading(AIMtab, "AUTO PUNCH")
 AddToggle(AIMtab, "Auto Punch", false, function(v) State.AutoPunch = v end)
-AddInfo(AIMtab, "Auto Punch triggers when you successfully block an incoming attack.")
+AddInfo(AIMtab, "Auto Punch triggers when you successfully block.")
 
 -- CREDITS
 local CREDITS = Pages["CREDITS"]
@@ -1427,7 +1460,7 @@ AddInfo(CREDITS, "IVY: Did good boys asmr while we coded")
 
 -- ============ INIT ============
 SwitchTab("OVERVIEW")
-EnsureRectLoop()
+EnsureBoxLoop()
 EnsureConeLoop()
 
-print("[C00LSAKEN 2077] Loaded. Facing check = ALWAYS ON. Box + Cone = ALWAYS in front of killer.")
+print("[C00LSAKEN 2077] Loaded. Facing check ALWAYS ON. Detection circle around PLAYER. Box + Cone in front of killer.")
