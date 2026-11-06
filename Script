@@ -393,7 +393,7 @@ local State = {
     InfiniteStamina = false, MaxStamina = 100, SprintSpeed = 20,
     StaminaGain = 10, StaminaDrain = 1, RegenDelay = 0.5,
     -- Auto Block
-    AutoBlock = false, AutoBlockBox = false,  -- circle by default
+    AutoBlock = false, AutoBlockShape = "Circle", -- exactly one active shape
     BlockDelay = 0, DetectionRange = 18,
     WallCheck = false, BlockMode = "Guest1337",
     MessageOnBlock = false, BlockMessage = "",
@@ -473,7 +473,9 @@ local function CalcRectCF(kr)
     local lv = kr.CFrame.LookVector
     local f = Vector3.new(lv.X, 0, lv.Z)
     if f.Magnitude < 0.01 then f = Vector3.new(0, 0, -1) else f = f.Unit end
-    return CFrame.lookAt(p, p + f)
+    local facing = CFrame.lookAt(p, p + f)
+    -- The box begins at the killer and extends forward, matching the cone.
+    return facing * CFrame.new(0, 0, -State.BoxLength / 2)
 end
 
 local function GetRectSize()
@@ -686,6 +688,17 @@ RunService.RenderStepped:Connect(function()
             playerCircle.Parent = myRoot
         end
         playerCircle.Radius = State.DetectionRange
+        local anyKillerInside = false
+        if KillersFolder and State.AutoBlockShape == "Circle" then
+            for _, killer in ipairs(KillersFolder:GetChildren()) do
+                local kr = killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart")
+                if kr and InCircleRange(kr, myRoot) then
+                    anyKillerInside = true
+                    break
+                end
+            end
+        end
+        playerCircle.Color3 = anyKillerInside and C.Green or Color3.fromRGB(0, 229, 255)
     else
         if playerCircle then playerCircle:Destroy(); playerCircle = nil end
     end
@@ -723,17 +736,37 @@ end)
 local AB = { running=false, conn=nil, attrStates={}, attrDebounce=0 }
 
 local function InCircleRange(kr, myRoot)
-    return (kr.Position - myRoot.Position).Magnitude <= State.DetectionRange
+    -- Match the flat detection circle shown around the local player.
+    local dx = kr.Position.X - myRoot.Position.X
+    local dz = kr.Position.Z - myRoot.Position.Z
+    return (dx * dx + dz * dz) <= (State.DetectionRange * State.DetectionRange)
 end
 
 local function InBoxRange(kr, myPos)
     local cf = CalcRectCF(kr)
-    local size = GetRectSize()
-    local hw = size.X/2 + 1.5
-    local hl = size.Z/2 + 1.5
-    local hh = size.Y/2 + 1.5
     local lp = cf:PointToObjectSpace(myPos)
-    return math.abs(lp.X) <= hw and math.abs(lp.Z) <= hl and math.abs(lp.Y) <= hh
+    return math.abs(lp.X) <= State.BoxWidth / 2
+        and math.abs(lp.Y) <= State.BoxHeight / 2
+        and math.abs(lp.Z) <= State.BoxLength / 2
+end
+
+local function InConeRange(kr, myPos)
+    local cf = GetFlatLook(kr)
+    local lp = cf:PointToObjectSpace(myPos)
+    local depth = -lp.Z
+    if depth < 0 or depth > State.ConeLength then return false end
+    if math.abs(lp.Y) > 5 then return false end
+    local halfWidthAtDepth = (State.ConeWidth / 2) * (depth / math.max(State.ConeLength, 0.01))
+    return math.abs(lp.X) <= halfWidthAtDepth
+end
+
+local function IsInsideSelectedShape(kr, myRoot)
+    if State.AutoBlockShape == "Box" then
+        return InBoxRange(kr, myRoot.Position)
+    elseif State.AutoBlockShape == "Cone" then
+        return InConeRange(kr, myRoot.Position)
+    end
+    return InCircleRange(kr, myRoot)
 end
 
 local function AttrHeartbeat()
@@ -763,24 +796,39 @@ local function AttrHeartbeat()
                                 st.isBait = false
                             else
                                 st.castLockUntil = n + 0.25
-                                local inRange
-                                if State.AutoBlockBox then
-                                    inRange = InBoxRange(kr, myRoot.Position)
-                                else
-                                    inRange = InCircleRange(kr, myRoot)
-                                end
+                                -- Snapshot the selected zone for this attack. The same zone
+                                -- must still be selected and the player must still be inside it
+                                -- at the exact moment the block is sent.
+                                local selectedShape = State.AutoBlockShape
+                                local inRange = IsInsideSelectedShape(kr, myRoot)
                                 if inRange then
-                                    -- Facing check ALWAYS ACTIVE
-                                    local facing = IsFacing(myRoot, kr)
                                     local wallOk = not State.WallCheck or not HasWallBetween(kr.Position, myRoot.Position, k)
-                                    if facing and wallOk and (n - AB.attrDebounce) >= 0.15 then
-                                        AB.attrDebounce = n
+                                    if wallOk and (n - (st.lastBlockTime or 0)) >= 0.15 then
+                                        st.lastBlockTime = n
                                         if State.BlockDelay > 0 then task.wait(State.BlockDelay) end
-                                        if State.BlockMode == "007n7" then FireClone() else FireBlock() end
-                                        if State.MessageOnBlock and State.BlockMessage ~= "" then
-                                            pcall(function()
-                                                TextChatService.TextChannels.RBXGeneral:SendAsync(State.BlockMessage)
-                                            end)
+
+                                        local currentCharacter = Player.Character
+                                        local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+                                        local currentHum = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
+                                        local stillValid = AB.running
+                                            and State.AutoBlock
+                                            and State.AutoBlockShape == selectedShape
+                                            and k.Parent == KillersFolder
+                                            and kr.Parent == k
+                                            and currentRoot ~= nil
+                                            and (not currentHum or currentHum.Health > 0)
+                                            and IsInsideSelectedShape(kr, currentRoot)
+
+                                        if stillValid then
+                                            local finalWallOk = not State.WallCheck or not HasWallBetween(kr.Position, currentRoot.Position, k)
+                                            if finalWallOk then
+                                                if State.BlockMode == "007n7" then FireClone() else FireBlock() end
+                                                if State.MessageOnBlock and State.BlockMessage ~= "" then
+                                                    pcall(function()
+                                                        TextChatService.TextChannels.RBXGeneral:SendAsync(State.BlockMessage)
+                                                    end)
+                                                end
+                                            end
                                         end
                                     end
                                 end
@@ -793,7 +841,7 @@ local function AttrHeartbeat()
                         st.lastUsed = au
                     end
                 else
-                    AB.attrStates[k] = { lastAbility=alu, lastUsed=au, isBait=false, castLockUntil=0 }
+                    AB.attrStates[k] = { lastAbility=alu, lastUsed=au, isBait=false, castLockUntil=0, lastBlockTime=0 }
                 end
             end
         end
@@ -1207,6 +1255,13 @@ local function EnsureBoxLoop()
                         else
                             BuildBoxEdges(box, CalcRectCF(kr), GetRectSize())
                         end
+                        local myRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+                        local inside = State.AutoBlockShape == "Box" and myRoot and InBoxRange(kr, myRoot.Position)
+                        for _, edge in ipairs(box.edges) do
+                            if edge and edge.Parent then
+                                edge.Color = inside and C.Green or Color3.fromRGB(175, 150, 220)
+                            end
+                        end
                     end
                 end
             end
@@ -1317,6 +1372,13 @@ local function EnsureConeLoop()
                         Cone.zones[k] = z
                     end
                     UpdateConeZone(z, kr)
+                    local myRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+                    local inside = State.AutoBlockShape == "Cone" and myRoot and InConeRange(kr, myRoot.Position)
+                    for _, edge in ipairs(z.edges) do
+                        if edge and edge.Parent then
+                            edge.Color = inside and C.Green or Color3.fromRGB(255, 60, 60)
+                        end
+                    end
                 end
             end
         end
@@ -1345,8 +1407,8 @@ local Overview = Pages["OVERVIEW"]
 AddHeading(Overview, "SYSTEM OVERVIEW")
 AddInfo(Overview, "C00LSAKEN 2077 // COMBINED SYSTEMS")
 AddInfo(Overview, "FEATURES: ESP, STAM, AUTO BLOCK, BOX, CONE, HDT, AIM/PUNCH")
-AddInfo(Overview, "FACING CHECK: ALWAYS ACTIVE (no toggle needed)")
-AddInfo(Overview, "BOX + CONE: ALWAYS in front of killer")
+AddInfo(Overview, "AUTO BLOCK: CIRCLE / CONE / BOX (ONE ACTIVE AT A TIME)")
+AddInfo(Overview, "SELECTED SHAPE: GREEN WHEN YOU ARE INSIDE")
 
 -- ESP
 local ESP = Pages["ESP"]
@@ -1392,12 +1454,40 @@ AddToggle(ABtab, "Auto Block (Circle Default)", false, function(v)
     State.AutoBlock = v
     if v then StartAutoBlock() else StopAutoBlock() end
 end)
-AddToggle(ABtab, "Switch to Box Mode", false, function(v) State.AutoBlockBox = v end)
+AddHeading(ABtab, "DETECTION SHAPE (SELECT ONE)")
+local ShapeButtons = {}
+local function SetAutoBlockShape(mode)
+    State.AutoBlockShape = mode
+    for name, button in pairs(ShapeButtons) do
+        local selected = name == mode
+        button.Text = name .. (selected and "  [ACTIVE]" or "")
+        button.BackgroundColor3 = selected and C.Green or C.Panel2
+        button.TextColor3 = selected and C.Black or C.White
+    end
+end
+local function AddShapeButton(mode)
+    local button = Create("TextButton", {
+        Size = UDim2.new(1, -4, 0, 34),
+        BackgroundColor3 = C.Panel2,
+        Text = mode,
+        TextColor3 = C.White,
+        TextSize = 12,
+        Font = Enum.Font.GothamBlack,
+        AutoButtonColor = false
+    }, ABtab)
+    Corner(button, 5)
+    ShapeButtons[mode] = button
+    button.Activated:Connect(function() SetAutoBlockShape(mode) end)
+end
+AddShapeButton("Circle")
+AddShapeButton("Cone")
+AddShapeButton("Box")
+SetAutoBlockShape("Circle")
+AddInfo(ABtab, "Only the selected shape is used for detection. No separate facing check is applied.")
 AddHeading(ABtab, "SETTINGS")
 AddToggle(ABtab, "Wall Check", false, function(v) State.WallCheck = v end)
 AddInput(ABtab, "Block Delay", "0", function(v) State.BlockDelay = tonumber(v) or 0 end)
 AddInput(ABtab, "Detection Range", "18", function(v) State.DetectionRange = tonumber(v) or 18 end)
-AddInput(ABtab, "Facing Dot Threshold", "0.3", function(v) State.FacingCheckThreshold = tonumber(v) or 0.3 end)
 AddHeading(ABtab, "BLOCK MODE")
 AddToggle(ABtab, "Use 007n7 (Clone)", false, function(v) State.BlockMode = v and "007n7" or "Guest1337" end)
 AddHeading(ABtab, "MESSAGES")
@@ -1463,4 +1553,4 @@ SwitchTab("OVERVIEW")
 EnsureBoxLoop()
 EnsureConeLoop()
 
-print("[C00LSAKEN 2077] Loaded. Facing check ALWAYS ON. Detection circle around PLAYER. Box + Cone in front of killer.")
+print("[C00LSAKEN 2077] Loaded. Auto Block shape modes: Circle / Cone / Box.")
