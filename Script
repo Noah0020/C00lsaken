@@ -1,11 +1,11 @@
 --[[
-    GODSAKEN UNIFIED v1.9 — REDLINE
-    Changes:
-      - Box added as 4th zone type (Circle / Dot / Diamond / Box)
-      - Same "Show Zone Visual" toggle controls all four
-      - Same detection path for all: geometric zone check + fire
-      - Removed Detection Mode dropdown, Show Box Visual toggle
-      - Removed zone explanation labels
+    GODSAKEN UNIFIED v2.0 — REDLINE
+    Fastest auto block:
+      - Signal-based detection (GetAttributeChangedSignal) — instant
+      - Frame-rate fallback loop (RenderStepped) — ~16ms
+      - 250ms pending window after real attack
+      - Dual-fire (direct remote + UI signal)
+      - 27s CD gate with text + timer fallback
 ]]
 
 local Players           = game:GetService("Players")
@@ -45,26 +45,22 @@ local function _num(v, d) return tonumber(v) or d end
 -- SETTINGS
 --═══════════════════════════════════════════════════════════════════
 local Settings = {
-    -- Auto Block
     AB_Enabled       = false,
     AB_Mode          = "Guest1337",
     AB_ShowZone      = true,
-
-    -- Facing zone (only one active)
-    AB_FacingMode    = "Circle",   -- Circle | Dot | Diamond | Box
+    AB_FacingMode    = "Circle",
     AB_CircleRadius  = 8,
     AB_DotRadius     = 5,
     AB_DotDistance   = 4,
     AB_DiamondLength = 8,
     AB_DiamondWidth  = 4,
     AB_DiamondOffset = 3,
+    AB_PendingWindow = 0.25,
 
-    -- Spam
     AB_SpamEnabled  = false,
     AB_SpamCount    = 4,
     AB_SpamDuration = 0.05,
 
-    -- Per-killer box sizes
     KillerHitbox = {
         ["Default"]   = { width=6, height=6, length=9, distance=3 },
         ["CoolKid"]   = { width=5, height=6, length=7, distance=3 },
@@ -79,38 +75,14 @@ local Settings = {
     },
     SelectedKillerBox = "Default",
 
-    -- Anti Bait
-    ABT_Enabled  = false,
-    ABT_Duration = 0.5,
-
-    -- HDT
-    HDT_Enabled  = false,
-    HDT_Speed    = 40,
-    HDT_Delay    = 0.05,
-    HDT_Duration = 0.6,
-
-    -- Auto Parry
-    AP_Enabled = false,
-    AP_Delay   = 0.5,
-
-    -- Punch Aim
-    PA_Enabled    = false,
-    PA_Prediction = 4,
-
-    -- Survivor Auto Aim
-    AIM_Enabled    = false,
-    AIM_Mode       = "Character",
-    AIM_Prediction = 4,
-    AIM_LockTime   = 0.7,
-    AIM_MinDist    = 3,
-    AIM_Range      = 55,
-    AIM_OnSlash    = true,
-    AIM_OnBlock    = true,
-    AIM_OnDagger   = true,
-    AIM_OnAxe      = true,
-    AIM_OnShoot    = true,
-
-    -- ESP
+    ABT_Enabled  = false, ABT_Duration = 0.5,
+    HDT_Enabled  = false, HDT_Speed = 40, HDT_Delay = 0.05, HDT_Duration = 0.6,
+    AP_Enabled = false, AP_Delay = 0.5,
+    PA_Enabled = false, PA_Prediction = 4,
+    AIM_Enabled = false, AIM_Mode = "Character", AIM_Prediction = 4,
+    AIM_LockTime = 0.7, AIM_MinDist = 3, AIM_Range = 55,
+    AIM_OnSlash = true, AIM_OnBlock = true, AIM_OnDagger = true,
+    AIM_OnAxe = true, AIM_OnShoot = true,
     ESP_Killer = false, ESP_Survivor = false, ESP_Generator = false,
     ESP_Medkit = false, ESP_Bloxy = false,
     ESP_WallCheck = false, ESP_MaxDist = 150,
@@ -160,9 +132,17 @@ for _, id in ipairs({
 }) do HDT_Anims["rbxassetid://"..id] = true end
 
 --═══════════════════════════════════════════════════════════════════
--- AUTO BLOCK
+-- AUTO BLOCK — FASTEST METHOD
 --═══════════════════════════════════════════════════════════════════
-local AB = { running=false, loop=nil, attrState={}, visual={}, lastBlock=0 }
+local AB = {
+    running         = false,
+    frameConn       = nil,
+    visual          = {},
+    perKiller       = {},       -- [killer] = state
+    lastBlock       = 0,
+    BLOCK_COOLDOWN  = 27,
+}
+
 local PLAYER_R = 1.5
 local RED, GREEN = Color3.fromRGB(255,70,70), Color3.fromRGB(70,255,120)
 
@@ -174,71 +154,86 @@ local function getHitboxConfig(killerName)
     return Settings.KillerHitbox["Default"]
 end
 
--- Unified geometric zone check across all 4 modes
+-- Fast dot-product zone check (no allocations)
 local function AB_IsInZone(myPos, killerRoot, killerModel)
     local mode = Settings.AB_FacingMode
-    local kCF, kPos = killerRoot.CFrame, killerRoot.Position
+    local kPos = killerRoot.Position
+    local kCF  = killerRoot.CFrame
 
     if mode == "Circle" then
         local dx, dz = myPos.X - kPos.X, myPos.Z - kPos.Z
         local r = Settings.AB_CircleRadius + PLAYER_R
         return dx*dx + dz*dz <= r*r
+    end
 
-    elseif mode == "Dot" then
-        local fwd = kCF.LookVector
-        local flatFwd = Vector3.new(fwd.X, 0, fwd.Z)
-        if flatFwd.Magnitude < 0.01 then flatFwd = Vector3.new(0, 0, -1) end
-        flatFwd = flatFwd.Unit
-        local center = kPos + flatFwd * Settings.AB_DotDistance
+    -- Precompute flat basis for other modes
+    local look = kCF.LookVector
+    local flatLook = Vector3.new(look.X, 0, look.Z)
+    if flatLook.Magnitude < 0.01 then flatLook = Vector3.new(0, 0, -1) end
+    flatLook = flatLook.Unit
+    local right = Vector3.new(-flatLook.Z, 0, flatLook.X)
+
+    if mode == "Dot" then
+        local center = kPos + flatLook * Settings.AB_DotDistance
         local dx, dz = myPos.X - center.X, myPos.Z - center.Z
         local r = Settings.AB_DotRadius + PLAYER_R
         return dx*dx + dz*dz <= r*r
-
     elseif mode == "Diamond" then
-        local fwd, rgt = kCF.LookVector, kCF.RightVector
-        local ff, rr = Vector3.new(fwd.X,0,fwd.Z), Vector3.new(rgt.X,0,rgt.Z)
-        if ff.Magnitude < 0.01 or rr.Magnitude < 0.01 then return false end
-        ff, rr = ff.Unit, rr.Unit
-        local tp = Vector3.new(myPos.X - kPos.X, 0, myPos.Z - kPos.Z)
-        local dF, dR = tp:Dot(ff), tp:Dot(rr)
+        local rel = myPos - kPos
+        local dF = rel:Dot(flatLook)
+        local dR = rel:Dot(right)
         local cd = Settings.AB_DiamondOffset + Settings.AB_DiamondLength/2
         local d = dF - cd
         local hw = Settings.AB_DiamondWidth/2 + PLAYER_R
         local hl = Settings.AB_DiamondLength/2 + PLAYER_R
         return math.abs(dR)/hw + math.abs(d)/hl <= 1
-
     elseif mode == "Box" then
         local cfg = getHitboxConfig(killerModel and killerModel.Name)
-        local boxCF = kCF * CFrame.new(0, 0, -cfg.distance)
-        local rel = boxCF:PointToObjectSpace(myPos)
+        local boxCenter = kPos + flatLook * cfg.distance
+        local rel = myPos - boxCenter
+        local dx = rel:Dot(right)
+        local dy = rel.Y
+        local dz = rel:Dot(flatLook)
         local hw = cfg.width/2 + PLAYER_R
         local hh = cfg.height/2 + PLAYER_R
         local hl = cfg.length/2 + PLAYER_R
-        return math.abs(rel.X) <= hw and math.abs(rel.Y) <= hh and math.abs(rel.Z) <= hl
+        return math.abs(dx) <= hw and math.abs(dy) <= hh and math.abs(dz) <= hl
     end
     return false
 end
 
+-- CD gate: text primary, 27s timer fallback
 local function AB_IsBlockReady()
     local mainUI = PlayerGui:FindFirstChild("MainUI")
-    if not mainUI then return true end
-    local ac = mainUI:FindFirstChild("AbilityContainer")
-    if not ac then return true end
-    local btn = ac:FindFirstChild(Settings.AB_Mode == "007n7" and "Clone" or "Block")
-    if not btn then return true end
-    local cd = btn:FindFirstChild("CooldownTime")
-    if not cd then return true end
-    local t = cd.Text
-    return t == nil or t == "" or t == " "
+    local ac = mainUI and mainUI:FindFirstChild("AbilityContainer")
+    local btn = ac and ac:FindFirstChild(Settings.AB_Mode == "007n7" and "Clone" or "Block")
+    if btn then
+        local cd = btn:FindFirstChild("CooldownTime")
+        if cd then
+            local t = cd.Text
+            if t == nil or t == "" or t == " " then return true end
+            return false
+        end
+    end
+    -- Fallback: our own 27s timer
+    return (tick() - (AB.lastBlock or 0)) >= (AB.BLOCK_COOLDOWN - 1)
 end
 
+-- Dual fire: direct remote + UI signal (fastest server response)
 local function AB_FireBlock()
     if not NetworkEvent then return end
     local name = Settings.AB_Mode == "007n7" and "Clone" or "Block"
-    pcall(function() NetworkEvent:FireServer("UseActorAbility", {name}) end)
+
+    -- 1. Direct remote (fastest)
     if buffer and buffer.fromstring then
-        pcall(function() NetworkEvent:FireServer("UseActorAbility", { buffer.fromstring("\3\5\0\0\0"..name) }) end)
+        pcall(function()
+            NetworkEvent:FireServer("UseActorAbility",
+                { buffer.fromstring("\3\5\0\0\0"..name) })
+        end)
     end
+    pcall(function() NetworkEvent:FireServer("UseActorAbility", {name}) end)
+
+    -- 2. Signal fire (triggers anim/HDT visual feedback)
     local mainUI = PlayerGui:FindFirstChild("MainUI")
     local ac = mainUI and mainUI:FindFirstChild("AbilityContainer")
     local btn = ac and ac:FindFirstChild(name)
@@ -252,10 +247,13 @@ local function AB_FireSpam()
     if not NetworkEvent then return end
     local name = Settings.AB_Mode == "007n7" and "Clone" or "Block"
     local count = math.max(1, tonumber(Settings.AB_SpamCount) or 4)
-    for i = 1, count do
-        task.spawn(function()
-            pcall(function() NetworkEvent:FireServer("UseActorAbility", {name}) end)
-        end)
+    if buffer and buffer.fromstring then
+        local buf = buffer.fromstring("\3\5\0\0\0"..name)
+        for i = 1, count do
+            task.spawn(function()
+                pcall(function() NetworkEvent:FireServer("UseActorAbility", {buf}) end)
+            end)
+        end
     end
     local dur = tonumber(Settings.AB_SpamDuration) or 0.05
     if dur > 0 then
@@ -273,55 +271,118 @@ local function AB_Fire()
     if Settings.AB_SpamEnabled then AB_FireSpam() else AB_FireBlock() end
 end
 
-local function AB_Loop()
-    while AB.running do
-        local char = LocalPlayer.Character
-        local hum  = char and char:FindFirstChildOfClass("Humanoid")
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root and root.Parent and hum and hum.Health > 0 then
-            local kf = GetKillersFolder()
-            if kf then
-                for _, killer in ipairs(kf:GetChildren()) do
-                    if killer:IsA("Model") and killer.Parent then
-                        local hrp = killer:FindFirstChild("HumanoidRootPart")
-                        if hrp and hrp.Parent then
-                            local aLU = killer:GetAttribute("AbilityLastUsed") or 0
-                            local aU  = killer:GetAttribute("AbilitiesUsed")   or 0
-                            local st  = AB.attrState[killer]
-                            if not st then
-                                AB.attrState[killer] = { lastAbility=aLU, lastUsed=aU, bait=false }
-                            else
-                                local inc = aLU > st.lastAbility
-                                if aU > st.lastUsed then st.bait = true end
-                                if inc then
-                                    if st.bait then
-                                        st.bait = false
-                                    else
-                                        if AB_IsBlockReady() and AB_IsInZone(root.Position, hrp, killer) then
-                                            local now = tick()
-                                            if now - AB.lastBlock >= 0.15 then
-                                                AB.lastBlock = now
-                                                AB_Fire()
-                                            end
-                                        end
-                                    end
-                                end
-                                st.lastAbility = aLU
-                                st.lastUsed    = aU
-                            end
-                        end
-                    end
+-- Try to fire (checks CD + zone + pending window)
+local function AB_TryFire(killer)
+    local st = AB.perKiller[killer]
+    if not st then return end
+    if st.pendingUntil <= 0 or tick() > st.pendingUntil then return end
+    if not AB_IsBlockReady() then return end
+
+    local char = LocalPlayer.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root or not hum or hum.Health <= 0 then return end
+    local hrp = killer:FindFirstChild("HumanoidRootPart")
+    if not hrp or not hrp.Parent then return end
+
+    if not AB_IsInZone(root.Position, hrp, killer) then return end
+
+    st.pendingUntil = 0
+    st.lastFireAt = tick()
+    AB.lastBlock = tick()
+    AB_Fire()
+end
+
+-- Attribute signal handler — fires INSTANTLY on replication
+local function AB_OnAttributeChanged(killer)
+    if not AB.running then return end
+    local st = AB.perKiller[killer]
+    if not st then return end
+
+    -- Sync bait from AbilitiesUsed (in case poll missed it)
+    local aU = killer:GetAttribute("AbilitiesUsed") or 0
+    if aU > st.lastUsed then
+        st.lastUsed = aU
+        st.baitFlag = true
+    end
+
+    local aLU = killer:GetAttribute("AbilityLastUsed") or 0
+    if aLU <= st.lastAbility then return end
+    st.lastAbility = aLU
+
+    if st.baitFlag then
+        st.baitFlag = false
+        return
+    end
+
+    -- Real attack — open pending window
+    st.pendingUntil = tick() + Settings.AB_PendingWindow
+    AB_TryFire(killer)
+end
+
+local function AB_HookKiller(killer)
+    if not killer:IsA("Model") then return end
+    if AB.perKiller[killer] then return end
+
+    local st = {
+        lastAbility  = killer:GetAttribute("AbilityLastUsed") or 0,
+        lastUsed     = killer:GetAttribute("AbilitiesUsed")   or 0,
+        baitFlag     = false,
+        pendingUntil = 0,
+        lastFireAt   = 0,
+        signalConn   = nil,
+    }
+
+    local ok, conn = pcall(function()
+        return killer:GetAttributeChangedSignal("AbilityLastUsed"):Connect(function()
+            AB_OnAttributeChanged(killer)
+        end)
+    end)
+    if ok and conn then st.signalConn = conn end
+
+    AB.perKiller[killer] = st
+end
+
+local function AB_UnhookKiller(killer)
+    local st = AB.perKiller[killer]
+    if st and st.signalConn then
+        pcall(function() st.signalConn:Disconnect() end)
+    end
+    AB.perKiller[killer] = nil
+end
+
+-- Frame-rate loop (fallback if signal missed; also maintains bait flag)
+local function AB_FrameLoop()
+    if not AB.running then return end
+    local kf = GetKillersFolder()
+    if not kf then return end
+
+    for _, killer in ipairs(kf:GetChildren()) do
+        if killer:IsA("Model") and killer.Parent then
+            if not AB.perKiller[killer] then AB_HookKiller(killer) end
+            local st = AB.perKiller[killer]
+            if st then
+                -- Bait flag update
+                local aU = killer:GetAttribute("AbilitiesUsed") or 0
+                if aU > st.lastUsed then
+                    st.lastUsed = aU
+                    st.baitFlag = true
+                end
+                -- Try fire if pending
+                if st.pendingUntil > 0 then
+                    AB_TryFire(killer)
                 end
             end
-            for k in pairs(AB.attrState) do
-                if not k.Parent then AB.attrState[k] = nil end
-            end
         end
-        task.wait(0.1)
+    end
+
+    -- Prune dead killers
+    for k in pairs(AB.perKiller) do
+        if not k.Parent then AB_UnhookKiller(k) end
     end
 end
 
--- Visual renderer for all 4 modes
+-- Visual renderer
 local function AB_RemoveVisual(model)
     local v = AB.visual[model]
     if v and v.folder then v.folder:Destroy() end
@@ -351,12 +412,10 @@ local function AB_UpdateVisual(model, hrp)
     local mode  = Settings.AB_FacingMode
     local origin = hrp.Position
 
-    -- Rebuild shape on mode change
     if v.mode ~= mode then
         for _, p in ipairs(v.parts) do p:Destroy() end
         table.clear(v.parts)
         v.mode = mode; v.circle = nil
-
         if mode == "Circle" or mode == "Dot" then
             local c = AB_MakePart(v.folder); c.Shape = Enum.PartType.Cylinder
             table.insert(v.parts, c); v.circle = c
@@ -390,7 +449,6 @@ local function AB_UpdateVisual(model, hrp)
         c.Color = color
         c.Size  = Vector3.new(0.18, radius*2, radius*2)
         c.CFrame = CFrame.new(center + Vector3.new(0, 0.04, 0)) * CFrame.Angles(0, 0, math.rad(90))
-
     elseif mode == "Diamond" then
         local fwd = hrp.CFrame.LookVector
         local flatFwd = Vector3.new(fwd.X, 0, fwd.Z)
@@ -417,7 +475,6 @@ local function AB_UpdateVisual(model, hrp)
         local b1,b2,b3,b4 = v.parts[5], v.parts[6], v.parts[7], v.parts[8]
         for _, b in ipairs({b1,b2,b3,b4}) do b.Color = color; b.Transparency = 0.2 end
         b1.Position = pBase; b2.Position = pLeft; b3.Position = pRight; b4.Position = pTip
-
     elseif mode == "Box" then
         local cfg = getHitboxConfig(model.Name)
         local boxCF = hrp.CFrame * CFrame.new(0, 0, -cfg.distance)
@@ -473,13 +530,24 @@ end)
 local function AB_Enable()
     if AB.running then return end
     AB.running = true
-    AB.attrState = {}; AB.lastBlock = 0
-    AB.loop = task.spawn(AB_Loop)
+    AB.perKiller = {}
+    AB.lastBlock = 0
+
+    -- Pre-hook existing killers
+    local kf = GetKillersFolder()
+    if kf then
+        for _, k in ipairs(kf:GetChildren()) do AB_HookKiller(k) end
+    end
+
+    -- Frame-rate fallback loop
+    AB.frameConn = RunService.RenderStepped:Connect(AB_FrameLoop)
 end
+
 local function AB_Disable()
     AB.running = false
-    if AB.loop then pcall(task.cancel, AB.loop); AB.loop = nil end
-    AB.attrState = {}
+    if AB.frameConn then pcall(function() AB.frameConn:Disconnect() end); AB.frameConn = nil end
+    for k in pairs(AB.perKiller) do AB_UnhookKiller(k) end
+    AB.perKiller = {}
     for m in pairs(AB.visual) do AB_RemoveVisual(m) end
 end
 
@@ -1154,6 +1222,7 @@ _G.Godsaken = {
         SetDiamondLength  = function(v) Settings.AB_DiamondLength = _num(v, 8) end,
         SetDiamondWidth   = function(v) Settings.AB_DiamondWidth = _num(v, 4) end,
         SetDiamondOffset  = function(v) Settings.AB_DiamondOffset = _num(v, 3) end,
+        SetPendingWindow  = function(v) Settings.AB_PendingWindow = _num(v, 0.25) end,
         SetSpamEnabled    = function(v) Settings.AB_SpamEnabled = v end,
         SetSpamCount      = function(v) Settings.AB_SpamCount = _num(v, 4) end,
         SetSpamDuration   = function(v) Settings.AB_SpamDuration = _num(v, 0.05) end,
@@ -1238,7 +1307,7 @@ Library.NotifySide = "Right"
 
 local Window = Library:CreateWindow({
     Title = "C00lsaken",
-    Footer = "REDLINE  |  v1.9",
+    Footer = "REDLINE  |  v2.0",
     ToggleKeybind = Enum.KeyCode.RightControl,
     Center = true, AutoShow = true, Resizable = true,
     ShowCustomCursor = false, MobileButtonsSide = "Right",
@@ -1269,6 +1338,10 @@ ABMain:AddDropdown("AB_Mode_D", {
 ABMain:AddToggle("AB_ShowZone_T", {
     Text = "Show Zone Visual", Default = Settings.AB_ShowZone,
     Callback = function(v) _G.Godsaken.AutoBlock.SetShowZone(v) end,
+})
+ABMain:AddSlider("AB_Pending_S", {
+    Text = "Pending Window (s)", Default = Settings.AB_PendingWindow, Min = 0.1, Max = 1, Rounding = 2,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetPendingWindow(v) end,
 })
 
 local HK = Tabs.AutoBlock:AddLeftGroupbox("HDT")
@@ -1313,7 +1386,6 @@ SPS:AddSlider("AB_SpamDur_S", {
     Callback = function(v) _G.Godsaken.AutoBlock.SetSpamDuration(v) end,
 })
 
--- Right column: Zone type dropdown + editors
 local ABRight = Tabs.AutoBlock:AddRightGroupbox("Facing Zone")
 ABRight:AddDropdown("AB_FacingMode_D", {
     Text = "Zone Type",
@@ -1538,8 +1610,8 @@ CB:AddLabel({ Text = "Helpers: Viltrumite & Ivy", DoesWrap = true })
 
 local AbBox = Tabs.Credits:AddRightGroupbox("ABOUT")
 AbBox:AddLabel({ Text = "C00lsaken Redline", Size = 16 })
-AbBox:AddLabel({ Text = "Circle / Dot / Diamond / Box zones + full stamina control.", DoesWrap = true })
-AbBox:AddLabel({ Text = "v1.9 — Box unified with other zone types.", DoesWrap = true })
+AbBox:AddLabel({ Text = "Fast auto block: signal + frame loop + 250ms window.", DoesWrap = true })
+AbBox:AddLabel({ Text = "v2.0 — fastest safe method.", DoesWrap = true })
 
 ThemeManager:LoadDefault()
 
@@ -1554,9 +1626,9 @@ Library:OnUnload(function()
 end)
 
 Library:Notify({
-    Title = "C00lsaken v1.9",
-    Description = "Box zone added to Facing Zone types",
+    Title = "C00lsaken v2.0",
+    Description = "Fast auto block: signal + frame loop + pending window",
     Time = 4,
 })
 
-print("[C00lsaken v1.9] Loaded.")
+print("[C00lsaken v2.0] Loaded.")
