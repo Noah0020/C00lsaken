@@ -1,7 +1,7 @@
 --[[
-    GODSAKEN UNIFIED v1.5 — REDLINE
-    Backend: raw attribute auto block + hi.txt facing zones (Circle/Dot/Diamond)
-    UI:      C00lsaken Redline (Obsidian)
+    GODSAKEN UNIFIED v1.7 — REDLINE
+    - Stam tab added (max/sprint speed/gain/drain/regen delay + infinite)
+    - All v1.6 fixes preserved (cooldown-aware block, no auto-turn on CD, etc.)
 ]]
 
 local Players           = game:GetService("Players")
@@ -41,27 +41,17 @@ local function _num(v, d) return tonumber(v) or d end
 -- SETTINGS
 --═══════════════════════════════════════════════════════════════════
 local Settings = {
-    -- Auto Block (raw)
     AB_Enabled     = false,
     AB_Mode        = "Guest1337",
     AB_ShowZone    = true,
-
-    -- Facing zone (only one active)
-    AB_FacingMode  = "Circle",   -- "Circle" | "Dot" | "Diamond"
-
-    -- Circle editor
+    AB_FacingMode  = "Circle",
     AB_CircleRadius  = 8,
-
-    -- Dot editor (circle in front)
     AB_DotRadius     = 5,
     AB_DotDistance   = 4,
-
-    -- Diamond editor
     AB_DiamondLength = 8,
     AB_DiamondWidth  = 4,
     AB_DiamondOffset = 3,
 
-    -- Other features
     ABT_Enabled = false, ABT_Duration = 0.5,
     AP_Enabled = false, AP_Delay = 0.5,
     PA_Enabled = false, PA_Prediction = 4,
@@ -73,11 +63,10 @@ local Settings = {
     ESP_Killer = false, ESP_Survivor = false, ESP_Generator = false,
     ESP_Medkit = false, ESP_Bloxy = false,
     ESP_WallCheck = false, ESP_MaxDist = 150,
-    InfStamina = false,
 }
 
 --═══════════════════════════════════════════════════════════════════
--- DATA (Parry / Punch / AntiBait / HDT anim ID tables)
+-- DATA TABLES
 --═══════════════════════════════════════════════════════════════════
 local ParrySounds = {}
 for _, id in ipairs({
@@ -120,51 +109,35 @@ for _, id in ipairs({
 }) do HDT_Anims["rbxassetid://"..id] = true end
 
 --═══════════════════════════════════════════════════════════════════
--- AUTO BLOCK — RAW ATTRIBUTE + FACING ZONES
+-- AUTO BLOCK
 --═══════════════════════════════════════════════════════════════════
-local AB = {
-    running = false, loop = nil,
-    attrState = {}, inZone = {}, visual = {},
-    lastBlock = 0,
-}
-
+local AB = { running=false, loop=nil, attrState={}, visual={}, lastBlock=0 }
 local PLAYER_R = 1.5
-local RED   = Color3.fromRGB(255, 70, 70)
-local GREEN = Color3.fromRGB(70, 255, 120)
+local RED, GREEN = Color3.fromRGB(255,70,70), Color3.fromRGB(70,255,120)
 
---─────────────────── ZONE GEOMETRY ───────────────────
 local function AB_IsInZone(myPos, killerRoot)
     local mode = Settings.AB_FacingMode
-    local kCF = killerRoot.CFrame
-    local kPos = killerRoot.Position
-
+    local kCF, kPos = killerRoot.CFrame, killerRoot.Position
     if mode == "Circle" then
-        local dx = myPos.X - kPos.X
-        local dz = myPos.Z - kPos.Z
+        local dx, dz = myPos.X - kPos.X, myPos.Z - kPos.Z
         local r = Settings.AB_CircleRadius + PLAYER_R
         return dx*dx + dz*dz <= r*r
-
     elseif mode == "Dot" then
         local fwd = kCF.LookVector
         local flatFwd = Vector3.new(fwd.X, 0, fwd.Z)
         if flatFwd.Magnitude < 0.01 then flatFwd = Vector3.new(0, 0, -1) end
         flatFwd = flatFwd.Unit
         local center = kPos + flatFwd * Settings.AB_DotDistance
-        local dx = myPos.X - center.X
-        local dz = myPos.Z - center.Z
+        local dx, dz = myPos.X - center.X, myPos.Z - center.Z
         local r = Settings.AB_DotRadius + PLAYER_R
         return dx*dx + dz*dz <= r*r
-
     elseif mode == "Diamond" then
-        local fwd = kCF.LookVector
-        local rgt = kCF.RightVector
-        local ff = Vector3.new(fwd.X, 0, fwd.Z)
-        local rr = Vector3.new(rgt.X, 0, rgt.Z)
+        local fwd, rgt = kCF.LookVector, kCF.RightVector
+        local ff, rr = Vector3.new(fwd.X,0,fwd.Z), Vector3.new(rgt.X,0,rgt.Z)
         if ff.Magnitude < 0.01 or rr.Magnitude < 0.01 then return false end
-        ff = ff.Unit; rr = rr.Unit
+        ff, rr = ff.Unit, rr.Unit
         local tp = Vector3.new(myPos.X - kPos.X, 0, myPos.Z - kPos.Z)
-        local dF = tp:Dot(ff)
-        local dR = tp:Dot(rr)
+        local dF, dR = tp:Dot(ff), tp:Dot(rr)
         local cd = Settings.AB_DiamondOffset + Settings.AB_DiamondLength/2
         local d = dF - cd
         local hw = Settings.AB_DiamondWidth/2 + PLAYER_R
@@ -174,7 +147,19 @@ local function AB_IsInZone(myPos, killerRoot)
     return false
 end
 
---─────────────────── FIRE ───────────────────
+local function AB_IsBlockReady()
+    local mainUI = PlayerGui:FindFirstChild("MainUI")
+    if not mainUI then return false end
+    local ac = mainUI:FindFirstChild("AbilityContainer")
+    if not ac then return false end
+    local btn = ac:FindFirstChild(Settings.AB_Mode == "007n7" and "Clone" or "Block")
+    if not btn then return false end
+    local cd = btn:FindFirstChild("CooldownTime")
+    if not cd then return true end
+    local t = cd.Text
+    return t == nil or t == "" or t == " "
+end
+
 local function AB_FireBlock()
     if not NetworkEvent then return end
     local name = Settings.AB_Mode == "007n7" and "Clone" or "Block"
@@ -191,38 +176,31 @@ local function AB_FireBlock()
     end
 end
 
---─────────────────── LOOP (RAW ATTRIBUTE POLL) ───────────────────
 local function AB_Loop()
     while AB.running do
         local char = LocalPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
         local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root and root.Parent then
+        if root and root.Parent and hum and hum.Health > 0 then
             local kf = GetKillersFolder()
             if kf then
                 for _, killer in ipairs(kf:GetChildren()) do
                     if killer:IsA("Model") and killer.Parent then
                         local hrp = killer:FindFirstChild("HumanoidRootPart")
                         if hrp and hrp.Parent then
-                            -- 1) compute zone membership
-                            AB.inZone[killer] = AB_IsInZone(root.Position, hrp)
-
-                            -- 2) raw attribute poll
                             local aLU = killer:GetAttribute("AbilityLastUsed") or 0
                             local aU  = killer:GetAttribute("AbilitiesUsed")   or 0
                             local st  = AB.attrState[killer]
-
                             if not st then
                                 AB.attrState[killer] = { lastAbility=aLU, lastUsed=aU, bait=false }
                             else
                                 local inc = aLU > st.lastAbility
                                 if aU > st.lastUsed then st.bait = true end
-
                                 if inc then
                                     if st.bait then
                                         st.bait = false
                                     else
-                                        -- block ONLY if in zone
-                                        if AB.inZone[killer] then
+                                        if AB_IsInZone(root.Position, hrp) and AB_IsBlockReady() then
                                             local now = tick()
                                             if now - AB.lastBlock >= 0.15 then
                                                 AB.lastBlock = now
@@ -231,7 +209,6 @@ local function AB_Loop()
                                         end
                                     end
                                 end
-
                                 st.lastAbility = aLU
                                 st.lastUsed    = aU
                             end
@@ -239,19 +216,14 @@ local function AB_Loop()
                     end
                 end
             end
-            -- prune
             for k in pairs(AB.attrState) do
-                if not k.Parent then
-                    AB.attrState[k] = nil
-                    AB.inZone[k] = nil
-                end
+                if not k.Parent then AB.attrState[k] = nil end
             end
         end
         task.wait(0.1)
     end
 end
 
---─────────────────── VISUALS ───────────────────
 local function AB_RemoveVisual(model)
     local v = AB.visual[model]
     if v and v.folder then v.folder:Destroy() end
@@ -275,19 +247,17 @@ local function AB_UpdateVisual(model, hrp)
         v = { folder=folder, parts={}, mode=nil }; AB.visual[model]=v
     end
 
-    local color = (AB.inZone[model] == true) and GREEN or RED
+    local inZoneNow = AB_IsInZone(LocalRoot.Position, hrp)
+    local color = inZoneNow and GREEN or RED
     local mode  = Settings.AB_FacingMode
     local origin = hrp.Position
 
-    -- (re)build shape if mode changed
     if v.mode ~= mode then
         for _, p in ipairs(v.parts) do p:Destroy() end
         table.clear(v.parts)
         v.mode = mode; v.circle = nil
-
         if mode == "Circle" or mode == "Dot" then
-            local c = AB_MakePart(v.folder)
-            c.Shape = Enum.PartType.Cylinder
+            local c = AB_MakePart(v.folder); c.Shape = Enum.PartType.Cylinder
             table.insert(v.parts, c); v.circle = c
         elseif mode == "Diamond" then
             for i=1,4 do table.insert(v.parts, AB_MakePart(v.folder)) end
@@ -317,7 +287,6 @@ local function AB_UpdateVisual(model, hrp)
         c.Color = color
         c.Size  = Vector3.new(0.18, radius*2, radius*2)
         c.CFrame = CFrame.new(center + Vector3.new(0, 0.04, 0)) * CFrame.Angles(0, 0, math.rad(90))
-
     elseif mode == "Diamond" then
         local fwd = hrp.CFrame.LookVector
         local flatFwd = Vector3.new(fwd.X, 0, fwd.Z)
@@ -330,12 +299,10 @@ local function AB_UpdateVisual(model, hrp)
         local pTip   = origin + flatFwd*(off + L)    + Vector3.new(0, yOff, 0)
         local pLeft  = origin + flatFwd*(off + L/2) - rgt*(W/2) + Vector3.new(0, yOff, 0)
         local pRight = origin + flatFwd*(off + L/2) + rgt*(W/2) + Vector3.new(0, yOff, 0)
-
         local function posLine(part, a, b)
             local diff = b - a; local len = diff.Magnitude
             if len <= 0.001 then part.Transparency = 1; return end
-            part.Transparency = 0.35
-            part.Color = color
+            part.Transparency = 0.35; part.Color = color
             part.Size = Vector3.new(0.18, 0.18, len)
             part.CFrame = CFrame.lookAt((a+b)/2, b)
         end
@@ -343,18 +310,14 @@ local function AB_UpdateVisual(model, hrp)
         posLine(v.parts[2], pBase,  pRight)
         posLine(v.parts[3], pLeft,  pTip)
         posLine(v.parts[4], pRight, pTip)
-
         local b1,b2,b3,b4 = v.parts[5], v.parts[6], v.parts[7], v.parts[8]
         for _, b in ipairs({b1,b2,b3,b4}) do b.Color = color; b.Transparency = 0.2 end
-        b1.Position = pBase
-        b2.Position = pLeft
-        b3.Position = pRight
-        b4.Position = pTip
+        b1.Position = pBase; b2.Position = pLeft; b3.Position = pRight; b4.Position = pTip
     end
 end
 
 RunService.RenderStepped:Connect(function()
-    if not AB.running or not Settings.AB_ShowZone then
+    if not Settings.AB_ShowZone then
         for m in pairs(AB.visual) do AB_RemoveVisual(m) end
         return
     end
@@ -374,17 +337,13 @@ end)
 local function AB_Enable()
     if AB.running then return end
     AB.running = true
-    AB.attrState = {}
-    AB.inZone = {}
-    AB.lastBlock = 0
+    AB.attrState = {}; AB.lastBlock = 0
     AB.loop = task.spawn(AB_Loop)
 end
-
 local function AB_Disable()
     AB.running = false
     if AB.loop then pcall(task.cancel, AB.loop); AB.loop = nil end
     AB.attrState = {}
-    AB.inZone = {}
     for m in pairs(AB.visual) do AB_RemoveVisual(m) end
 end
 
@@ -403,7 +362,8 @@ end
 local function ABT_RunSequence(character)
     if not ABT.running or ABT.cleanup then return end
     local hrp = character:FindFirstChild("HumanoidRootPart")
-    local kf = GetKillersFolder(); if not hrp or not kf then return end
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    local kf = GetKillersFolder(); if not hrp or not kf or not hum then return end
     local killer = kf:FindFirstChildOfClass("Model")
     local khrp = killer and killer:FindFirstChild("HumanoidRootPart"); if not khrp then return end
 
@@ -431,7 +391,8 @@ local function ABT_RunSequence(character)
     ABT.cleanup = cleanup
 
     conn = RunService.RenderStepped:Connect(function(dt)
-        if not ABT.running or not character.Parent or not part.Parent or not khrp.Parent then cleanup(); return end
+        if not ABT.running or not character.Parent or not part.Parent
+           or not khrp.Parent or not hum.Parent or hum.Health <= 0 then cleanup(); return end
         character.PrimaryPart = part
         local target = khrp.Position + khrp.CFrame.LookVector * 2
         local diff = target - part.Position
@@ -475,13 +436,16 @@ local function ABT_Disable() ABT_Stop() end
 --═══════════════════════════════════════════════════════════════════
 -- AUTO PARRY
 --═══════════════════════════════════════════════════════════════════
-local AP = { running=false, conn=nil, soundConns={} }
+local AP = { running=false, conn=nil, soundConns={}, soundDebounce={} }
 
 local function AP_Hook(sound)
     if not sound:IsA("Sound") or sound:GetAttribute("GS_AP") then return end
     sound:SetAttribute("GS_AP", true)
     table.insert(AP.soundConns, sound.Played:Connect(function()
         if not AP.running or not ParrySounds[sound.SoundId] then return end
+        local now = tick()
+        if now - (AP.soundDebounce[sound] or 0) < 0.3 then return end
+        AP.soundDebounce[sound] = now
         task.wait(Settings.AP_Delay)
         if not AP.running then return end
         AB_FireBlock()
@@ -507,7 +471,7 @@ end
 local function AP_Disable()
     AP.running = false
     for _, c in ipairs(AP.soundConns) do pcall(function() c:Disconnect() end) end
-    AP.soundConns = {}
+    AP.soundConns = {}; AP.soundDebounce = {}
     if AP.conn then pcall(function() AP.conn:Disconnect() end); AP.conn=nil end
 end
 
@@ -544,33 +508,36 @@ local function PA_Loop()
         if PA.looking and PA.lookStarted and (tick() - PA.lookStarted) > 2 then
             PA.looking = false; PA.lookStarted = nil
         end
-        if PA.looking then continue end
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if hum and root and root.Parent then
-            for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-                local aid = track.Animation and track.Animation.AnimationId
-                if aid and PunchAnims[aid] then
-                    local kf = GetKillersFolder()
-                    if kf then
-                        local closest, cd = nil, math.huge
-                        for _, k in ipairs(kf:GetChildren()) do
-                            local kr = k:FindFirstChild("HumanoidRootPart")
-                            if kr and kr.Parent then
-                                local d = (root.Position - kr.Position).Magnitude
-                                if d < cd then cd = d; closest = kr end
+        if PA.looking then
+            -- do nothing this frame
+        else
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if hum and root and root.Parent and hum.Health > 0 then
+                for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                    local aid = track.Animation and track.Animation.AnimationId
+                    if aid and PunchAnims[aid] then
+                        local kf = GetKillersFolder()
+                        if kf then
+                            local closest, cd = nil, math.huge
+                            for _, k in ipairs(kf:GetChildren()) do
+                                local kr = k:FindFirstChild("HumanoidRootPart")
+                                if kr and kr.Parent then
+                                    local d = (root.Position - kr.Position).Magnitude
+                                    if d < cd then cd = d; closest = kr end
+                                end
+                            end
+                            if closest then
+                                PA.looking = true; PA.lookStarted = tick()
+                                task.spawn(function()
+                                    pcall(PA_AimOnce, hum, root, closest)
+                                    PA.looking = false; PA.lookStarted = nil
+                                end)
                             end
                         end
-                        if closest then
-                            PA.looking = true; PA.lookStarted = tick()
-                            task.spawn(function()
-                                pcall(PA_AimOnce, hum, root, closest)
-                                PA.looking = false; PA.lookStarted = nil
-                            end)
-                        end
+                        break
                     end
-                    break
                 end
             end
         end
@@ -611,7 +578,7 @@ local function HDT_Dash(killer)
     local char = LocalPlayer.Character; if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then return end
+    if not hrp or not hum or hum.Health <= 0 then return end
     local kr = killer:FindFirstChild("HumanoidRootPart") or killer.PrimaryPart
     if not kr or (kr.Position - hrp.Position).Magnitude < 2.5 then return end
 
@@ -635,7 +602,7 @@ local function HDT_Dash(killer)
     pcall(function() RunService:UnbindFromRenderStep(HDT.bind) end)
     RunService:BindToRenderStep(HDT.bind, Enum.RenderPriority.Last.Value + 1, function()
         if not HDT.debounce then stop(); return end
-        if not char.Parent or not killer.Parent or not hum.Parent then stop(); return end
+        if not char.Parent or not killer.Parent or not hum.Parent or hum.Health <= 0 then stop(); return end
         local kt = killer:FindFirstChild("HumanoidRootPart"); if not kt then stop(); return end
         local flat = Vector3.new(kt.Position.X - hrp.Position.X, 0, kt.Position.Z - hrp.Position.Z)
         if flat.Magnitude <= 2 then stop(); return end
@@ -912,9 +879,20 @@ end)
 local function ES_Refresh() for m in pairs(ESP_HL) do ES_Clear(m) end end
 
 --═══════════════════════════════════════════════════════════════════
--- STAMINA
+-- STAMINA  (meowsaken-style, multi-field)
 --═══════════════════════════════════════════════════════════════════
-local Stam = { running=false, thread=nil, saved=nil, mod=nil }
+local Stam = {
+    running = false,
+    thread = nil,
+    mod = nil,
+    saved = nil,
+    MaxStamina = nil,
+    SprintSpeed = nil,
+    StaminaGain = nil,
+    StaminaDrain = nil,
+    StaminaRegenDelay = nil,
+    Infinite = false,
+}
 
 local function Stam_GetMod()
     local ok, m = pcall(function() return require(ReplicatedStorage.Systems.Character.Game.Sprinting) end)
@@ -925,36 +903,140 @@ local function Stam_GetMod()
     return ok and m or nil
 end
 
-local function Stam_Enable()
+-- Snapshot module on first access so we can restore later
+local function Stam_EnsureMod()
+    if Stam.mod then return Stam.mod end
+    local m = Stam_GetMod()
+    if m then
+        Stam.mod = m
+        Stam.saved = {
+            MaxStamina        = m.MaxStamina,
+            SprintSpeed       = m.SprintSpeed,
+            StaminaGain       = m.StaminaGain,
+            StaminaDrain      = m.StaminaDrain,
+            StaminaRegenDelay = m.StaminaRegenDelay,
+            Stamina           = m.Stamina,
+        }
+    end
+    return m
+end
+
+-- Push current user overrides to module once
+local function Stam_ApplyOnce()
+    local m = Stam_EnsureMod()
+    if not m then return end
+    if Stam.MaxStamina        ~= nil then m.MaxStamina        = Stam.MaxStamina        end
+    if Stam.SprintSpeed       ~= nil then m.SprintSpeed       = Stam.SprintSpeed       end
+    if Stam.StaminaGain       ~= nil then m.StaminaGain       = Stam.StaminaGain       end
+    if Stam.StaminaDrain      ~= nil then m.StaminaDrain      = Stam.StaminaDrain      end
+    if Stam.StaminaRegenDelay ~= nil then m.StaminaRegenDelay = Stam.StaminaRegenDelay end
+    -- clamp live stamina to new cap
+    if Stam.MaxStamina and m.Stamina and m.Stamina > Stam.MaxStamina then
+        m.Stamina = Stam.MaxStamina
+    end
+end
+
+local function Stam_StartLoop()
     if Stam.running then return end
     Stam.running = true
     Stam.thread = task.spawn(function()
-        local mod = Stam_GetMod(); if not mod then Stam.running = false; return end
-        Stam.mod = mod
-        Stam.saved = { MaxStamina=mod.MaxStamina, StaminaDrain=mod.StaminaDrain, StaminaGain=mod.StaminaGain, Stamina=mod.Stamina }
         while Stam.running do
             task.wait(0.01)
-            pcall(function()
-                if mod.MaxStamina   then mod.MaxStamina   = math.max(mod.MaxStamina, 1000) end
-                if mod.Stamina      then mod.Stamina      = mod.MaxStamina or 1000 end
-                if mod.StaminaDrain then mod.StaminaDrain = 0 end
-            end)
+            local m = Stam.mod
+            if m then
+                pcall(function()
+                    if Stam.MaxStamina        ~= nil then m.MaxStamina        = Stam.MaxStamina        end
+                    if Stam.SprintSpeed       ~= nil then m.SprintSpeed       = Stam.SprintSpeed       end
+                    if Stam.StaminaGain       ~= nil then m.StaminaGain       = Stam.StaminaGain       end
+                    if Stam.StaminaDrain      ~= nil then m.StaminaDrain      = Stam.StaminaDrain      end
+                    if Stam.StaminaRegenDelay ~= nil then m.StaminaRegenDelay = Stam.StaminaRegenDelay end
+                    if Stam.Infinite then
+                        m.Stamina = m.MaxStamina or 1000
+                        if m.StaminaDrain ~= nil then m.StaminaDrain = 0 end
+                    end
+                end)
+            end
         end
     end)
 end
 
-local function Stam_Disable()
+local function Stam_StopLoop()
     Stam.running = false
     if Stam.thread then pcall(task.cancel, Stam.thread); Stam.thread = nil end
+end
+
+-- Restore every field to original snapshot
+local function Stam_Restore()
     if Stam.mod and Stam.saved then
         pcall(function()
-            if Stam.saved.MaxStamina   then Stam.mod.MaxStamina   = Stam.saved.MaxStamina   end
-            if Stam.saved.StaminaDrain then Stam.mod.StaminaDrain = Stam.saved.StaminaDrain end
-            if Stam.saved.StaminaGain  then Stam.mod.StaminaGain  = Stam.saved.StaminaGain  end
-            if Stam.saved.Stamina      then Stam.mod.Stamina      = Stam.saved.Stamina      end
+            local m, s = Stam.mod, Stam.saved
+            if s.MaxStamina        ~= nil then m.MaxStamina        = s.MaxStamina        end
+            if s.SprintSpeed       ~= nil then m.SprintSpeed       = s.SprintSpeed       end
+            if s.StaminaGain       ~= nil then m.StaminaGain       = s.StaminaGain       end
+            if s.StaminaDrain      ~= nil then m.StaminaDrain      = s.StaminaDrain      end
+            if s.StaminaRegenDelay ~= nil then m.StaminaRegenDelay = s.StaminaRegenDelay end
+            if s.Stamina           ~= nil then m.Stamina           = s.Stamina           end
         end)
     end
-    Stam.saved = nil
+    Stam.MaxStamina = nil
+    Stam.SprintSpeed = nil
+    Stam.StaminaGain = nil
+    Stam.StaminaDrain = nil
+    Stam.StaminaRegenDelay = nil
+    Stam.Infinite = false
+end
+
+local function Stam_SetInfinite(v)
+    Stam.Infinite = v and true or false
+    if Stam.Infinite then
+        Stam_EnsureMod()
+        Stam_StartLoop()
+    else
+        Stam_StopLoop()
+        -- undo the drain=0 that infinite wrote
+        if Stam.mod and Stam.saved then
+            local m, s = Stam.mod, Stam.saved
+            if Stam.StaminaDrain ~= nil then
+                m.StaminaDrain = Stam.StaminaDrain
+            elseif s.StaminaDrain ~= nil then
+                m.StaminaDrain = s.StaminaDrain
+            end
+        end
+        Stam_ApplyOnce()
+    end
+end
+
+local function Stam_SetField(field, v)
+    local n = tonumber(v)
+    if not n then return end
+    Stam[field] = n
+    Stam_EnsureMod()
+    Stam_ApplyOnce()
+end
+
+-- Snapshot module now so UI defaults reflect real game values
+local STAM_DEFAULT = {
+    MaxStamina = 100, SprintSpeed = 26, StaminaGain = 20,
+    StaminaDrain = 10, StaminaRegenDelay = 0.5,
+}
+do
+    local m = Stam_GetMod()
+    if m then
+        if m.MaxStamina        ~= nil then STAM_DEFAULT.MaxStamina        = m.MaxStamina        end
+        if m.SprintSpeed       ~= nil then STAM_DEFAULT.SprintSpeed       = m.SprintSpeed       end
+        if m.StaminaGain       ~= nil then STAM_DEFAULT.StaminaGain       = m.StaminaGain       end
+        if m.StaminaDrain      ~= nil then STAM_DEFAULT.StaminaDrain      = m.StaminaDrain      end
+        if m.StaminaRegenDelay ~= nil then STAM_DEFAULT.StaminaRegenDelay = m.StaminaRegenDelay end
+        Stam.mod = m
+        Stam.saved = {
+            MaxStamina        = m.MaxStamina,
+            SprintSpeed       = m.SprintSpeed,
+            StaminaGain       = m.StaminaGain,
+            StaminaDrain      = m.StaminaDrain,
+            StaminaRegenDelay = m.StaminaRegenDelay,
+            Stamina           = m.Stamina,
+        }
+    end
 end
 
 --═══════════════════════════════════════════════════════════════════
@@ -963,8 +1045,7 @@ end
 _G.Godsaken = {
     Settings = Settings,
     AutoBlock = {
-        Enable          = AB_Enable,
-        Disable         = AB_Disable,
+        Enable=AB_Enable, Disable=AB_Disable,
         SetMode         = function(m) Settings.AB_Mode = m end,
         SetFacingMode   = function(m) Settings.AB_FacingMode = m end,
         SetShowZone     = function(v) Settings.AB_ShowZone = v end,
@@ -1011,7 +1092,18 @@ _G.Godsaken = {
         ToggleWall   = function(v) Settings.ESP_WallCheck=v end,
         SetRange     = function(v) Settings.ESP_MaxDist=_num(v,150) end,
     },
-    Stamina = { Enable=Stam_Enable, Disable=Stam_Disable },
+    Stamina = {
+        SetInfinite      = Stam_SetInfinite,
+        SetMaxStamina    = function(v) Stam_SetField("MaxStamina", v) end,
+        SetSprintSpeed   = function(v) Stam_SetField("SprintSpeed", v) end,
+        SetStaminaGain   = function(v) Stam_SetField("StaminaGain", v) end,
+        SetStaminaDrain  = function(v) Stam_SetField("StaminaDrain", v) end,
+        SetRegenDelay    = function(v) Stam_SetField("StaminaRegenDelay", v) end,
+        Restore          = function() Stam_StopLoop(); Stam_Restore() end,
+        Enable  = function() Stam_SetInfinite(true)  end,
+        Disable = function() Stam_SetInfinite(false); Stam_StopLoop(); Stam_Restore() end,
+        Defaults = STAM_DEFAULT,
+    },
 }
 
 --═══════════════════════════════════════════════════════════════════
@@ -1038,16 +1130,16 @@ Library.NotifySide = "Right"
 
 local Window = Library:CreateWindow({
     Title = "C00lsaken",
-    Footer = "REDLINE  |  v1.5",
+    Footer = "REDLINE  |  v1.7",
     ToggleKeybind = Enum.KeyCode.RightControl,
     Center = true, AutoShow = true, Resizable = true,
     ShowCustomCursor = false, MobileButtonsSide = "Right",
 })
 
 local Tabs = {
-    Overview   = Window:AddTab("Overview",   "layout-dashboard"),
     AutoBlock  = Window:AddTab("Auto Block", "shield"),
     Survivor   = Window:AddTab("Survivor",   "swords"),
+    Stamina    = Window:AddTab("Stamina",    "zap"),
     Killer     = Window:AddTab("Killer",     "crosshair"),
     Visuals    = Window:AddTab("Visuals",    "eye"),
     Appearance = Window:AddTab("Appearance", "palette"),
@@ -1055,40 +1147,20 @@ local Tabs = {
 }
 
 --═══════════════════════════════════════════════════════════════════
--- OVERVIEW
---═══════════════════════════════════════════════════════════════════
-local OV = Tabs.Overview:AddLeftGroupbox("C00LSAKEN")
-OV:AddLabel({ Text = "REDLINE INTERFACE", DoesWrap = true, Size = 16 })
-OV:AddDivider()
-OV:AddLabel({ Text = "Raw attribute auto block + hi.txt facing zones", DoesWrap = true })
-OV:AddLabel({ Text = "Toggle: RightControl", DoesWrap = true })
-
-local Info = Tabs.Overview:AddRightGroupbox("BUILD INFO")
-Info:AddLabel("Project: C00lsaken")
-Info:AddLabel("UI: Obsidian / Redline")
-Info:AddLabel("Backend: Godsaken v1.5")
-Info:AddLabel("Facing: Circle / Dot / Diamond")
-
---═══════════════════════════════════════════════════════════════════
 -- AUTO BLOCK TAB
 --═══════════════════════════════════════════════════════════════════
 local ABLeft = Tabs.AutoBlock:AddLeftGroupbox("Auto Block (Raw)")
 ABLeft:AddToggle("AB_Enable_T", {
-    Text = "Enable Auto Block",
-    Default = false,
-    Callback = function(v)
-        if v then _G.Godsaken.AutoBlock.Enable() else _G.Godsaken.AutoBlock.Disable() end
-    end,
+    Text = "Enable Auto Block", Default = false,
+    Callback = function(v) if v then _G.Godsaken.AutoBlock.Enable() else _G.Godsaken.AutoBlock.Disable() end end,
 })
 ABLeft:AddDropdown("AB_Mode_D", {
-    Text = "Block Ability",
-    Values = { "Guest1337", "007n7" },
+    Text = "Block Ability", Values = { "Guest1337", "007n7" },
     Default = "Guest1337", Multi = false,
     Callback = function(v) _G.Godsaken.AutoBlock.SetMode(v) end,
 })
 ABLeft:AddToggle("AB_ShowZone_T", {
-    Text = "Show Zone Visual",
-    Default = true,
+    Text = "Show Zone Visual", Default = true,
     Callback = function(v) _G.Godsaken.AutoBlock.SetShowZone(v) end,
 })
 
@@ -1099,11 +1171,9 @@ ABRight:AddDropdown("AB_FacingMode_D", {
     Default = "Circle", Multi = false,
     Callback = function(v) _G.Godsaken.AutoBlock.SetFacingMode(v) end,
 })
-ABRight:AddLabel({ Text = "Circle = around killer", DoesWrap = true })
-ABRight:AddLabel({ Text = "Dot = circle in front of killer", DoesWrap = true })
+ABRight:AddLabel({ Text = "Circle  = around killer", DoesWrap = true })
+ABRight:AddLabel({ Text = "Dot     = circle in front of killer", DoesWrap = true })
 ABRight:AddLabel({ Text = "Diamond = rhombus in front of killer", DoesWrap = true })
-ABRight:AddDivider()
-ABRight:AddLabel({ Text = "Editors below — only the selected type is used.", DoesWrap = true })
 
 local ABE1 = Tabs.AutoBlock:AddLeftGroupbox("Zone Editor - Circle")
 ABE1:AddSlider("AB_CircleRadius_S", {
@@ -1114,30 +1184,25 @@ ABE1:AddSlider("AB_CircleRadius_S", {
 
 local ABE2 = Tabs.AutoBlock:AddRightGroupbox("Zone Editor - Dot")
 ABE2:AddSlider("AB_DotRadius_S", {
-    Text = "Dot Radius",
-    Default = 5, Min = 1, Max = 20, Rounding = 1,
+    Text = "Dot Radius", Default = 5, Min = 1, Max = 20, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDotRadius(v) end,
 })
 ABE2:AddSlider("AB_DotDistance_S", {
-    Text = "Distance from Killer",
-    Default = 4, Min = 0, Max = 20, Rounding = 1,
+    Text = "Distance from Killer", Default = 4, Min = 0, Max = 20, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDotDistance(v) end,
 })
 
 local ABE3 = Tabs.AutoBlock:AddLeftGroupbox("Zone Editor - Diamond")
 ABE3:AddSlider("AB_DiamondLength_S", {
-    Text = "Length",
-    Default = 8, Min = 2, Max = 30, Rounding = 1,
+    Text = "Length", Default = 8, Min = 2, Max = 30, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDiamondLength(v) end,
 })
 ABE3:AddSlider("AB_DiamondWidth_S", {
-    Text = "Width",
-    Default = 4, Min = 1, Max = 20, Rounding = 1,
+    Text = "Width", Default = 4, Min = 1, Max = 20, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDiamondWidth(v) end,
 })
 ABE3:AddSlider("AB_DiamondOffset_S", {
-    Text = "Offset from Killer",
-    Default = 3, Min = 0, Max = 20, Rounding = 1,
+    Text = "Offset from Killer", Default = 3, Min = 0, Max = 20, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDiamondOffset(v) end,
 })
 
@@ -1197,11 +1262,61 @@ SAim:AddSlider("AIM_Range", {
 })
 
 local SPat = Tabs.Survivor:AddRightGroupbox("Trigger Patterns")
-SPat:AddToggle("PatSlash",  { Text = "Shedletsky - Slash",            Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("slash",  v) end })
-SPat:AddToggle("PatBlock",  { Text = "Guest - Block / Parry / Punch", Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("block",  v) end })
-SPat:AddToggle("PatDagger", { Text = "Two Time - Any Dagger",         Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("dagger", v) end })
-SPat:AddToggle("PatAxe",    { Text = "Jane Doe - Hatchet",            Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("axe",    v) end })
-SPat:AddToggle("PatShoot",  { Text = "Chance - Shoot / Oneshot / Gun",Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("shoot",  v) end })
+SPat:AddToggle("PatSlash",  { Text = "Shedletsky - Slash",             Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("slash",  v) end })
+SPat:AddToggle("PatBlock",  { Text = "Guest - Block / Parry / Punch",  Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("block",  v) end })
+SPat:AddToggle("PatDagger", { Text = "Two Time - Any Dagger",          Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("dagger", v) end })
+SPat:AddToggle("PatAxe",    { Text = "Jane Doe - Hatchet",             Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("axe",    v) end })
+SPat:AddToggle("PatShoot",  { Text = "Chance - Shoot / Oneshot / Gun", Default = true, Callback = function(v) _G.Godsaken.SurvivorAim.SetPattern("shoot",  v) end })
+
+--═══════════════════════════════════════════════════════════════════
+-- STAMINA TAB
+--═══════════════════════════════════════════════════════════════════
+local STInf = Tabs.Stamina:AddLeftGroupbox("Infinite Stamina")
+STInf:AddToggle("Stam_Inf_T", {
+    Text = "Infinite Stamina", Default = false,
+    Callback = function(v) _G.Godsaken.Stamina.SetInfinite(v) end,
+})
+STInf:AddDivider()
+STInf:AddButton({
+    Text = "Restore Original Values",
+    Func = function()
+        _G.Godsaken.Stamina.Restore()
+    end,
+})
+STInf:AddLabel({ Text = "Restores game stamina module and clears all overrides.", DoesWrap = true })
+
+local STOvr = Tabs.Stamina:AddRightGroupbox("Stamina Overrides")
+STOvr:AddLabel({ Text = "Enable a slider to override that field.", DoesWrap = true })
+STOvr:AddSlider("Stam_Max_S", {
+    Text = "Max Stamina",
+    Default = STAM_DEFAULT.MaxStamina,
+    Min = 1, Max = 1000, Rounding = 0,
+    Callback = function(v) _G.Godsaken.Stamina.SetMaxStamina(v) end,
+})
+STOvr:AddSlider("Stam_Sprint_S", {
+    Text = "Sprint Speed",
+    Default = STAM_DEFAULT.SprintSpeed,
+    Min = 1, Max = 60, Rounding = 0,
+    Callback = function(v) _G.Godsaken.Stamina.SetSprintSpeed(v) end,
+})
+STOvr:AddSlider("Stam_Gain_S", {
+    Text = "Stamina Gain",
+    Default = STAM_DEFAULT.StaminaGain,
+    Min = 1, Max = 1000, Rounding = 0,
+    Callback = function(v) _G.Godsaken.Stamina.SetStaminaGain(v) end,
+})
+STOvr:AddSlider("Stam_Drain_S", {
+    Text = "Stamina Drain",
+    Default = STAM_DEFAULT.StaminaDrain,
+    Min = 0, Max = 1000, Rounding = 0,
+    Callback = function(v) _G.Godsaken.Stamina.SetStaminaDrain(v) end,
+})
+STOvr:AddSlider("Stam_Regen_S", {
+    Text = "Regen Delay (s)",
+    Default = STAM_DEFAULT.StaminaRegenDelay,
+    Min = 0, Max = 10, Rounding = 2,
+    Callback = function(v) _G.Godsaken.Stamina.SetRegenDelay(v) end,
+})
 
 --═══════════════════════════════════════════════════════════════════
 -- KILLER
@@ -1222,12 +1337,6 @@ HK:AddSlider("HDT_Delay", {
 HK:AddSlider("HDT_Dur", {
     Text = "Duration", Default = 0.6, Min = 0.1, Max = 2, Rounding = 2,
     Callback = function(v) _G.Godsaken.HDT.SetDuration(v) end,
-})
-
-local KS = Tabs.Killer:AddRightGroupbox("Stamina")
-KS:AddToggle("Stam_T", {
-    Text = "Infinite Stamina", Default = false,
-    Callback = function(v) if v then _G.Godsaken.Stamina.Enable() else _G.Godsaken.Stamina.Disable() end end,
 })
 
 --═══════════════════════════════════════════════════════════════════
@@ -1262,13 +1371,11 @@ ThemeManager:ApplyToTab(Tabs.Appearance)
 local CB = Tabs.Credits:AddLeftGroupbox("CREDITS")
 CB:AddLabel({ Text = "Coding & Owner: c00lkid / random_dude", DoesWrap = true })
 CB:AddLabel({ Text = "Helpers: Viltrumite & Ivy", DoesWrap = true })
-CB:AddDivider()
-CB:AddLabel({ Text = "Viltrumite: helped with some features.", DoesWrap = true })
-CB:AddLabel({ Text = "Ivy: provided feedback and assistance.", DoesWrap = true })
 
 local AbBox = Tabs.Credits:AddRightGroupbox("ABOUT")
 AbBox:AddLabel({ Text = "C00lsaken Redline", Size = 16 })
-AbBox:AddLabel({ Text = "Raw auto block + Circle/Dot/Diamond facing zones.", DoesWrap = true })
+AbBox:AddLabel({ Text = "Raw auto block + Circle/Dot/Diamond facing zones + full Stamina control.", DoesWrap = true })
+AbBox:AddLabel({ Text = "v1.7 — Stam tab added.", DoesWrap = true })
 
 ThemeManager:LoadDefault()
 
@@ -1279,13 +1386,13 @@ Library:OnUnload(function()
     pcall(function() _G.Godsaken.PunchAim.Disable()  end)
     pcall(function() _G.Godsaken.HDT.Disable()       end)
     pcall(function() _G.Godsaken.SurvivorAim.Disable() end)
-    pcall(function() _G.Godsaken.Stamina.Disable()   end)
+    pcall(function() _G.Godsaken.Stamina.Restore()   end)
 end)
 
 Library:Notify({
-    Title = "C00lsaken v1.5",
-    Description = "Raw auto block + Circle/Dot/Diamond zones loaded.",
+    Title = "C00lsaken v1.7",
+    Description = "Stam tab added — infinite + full overrides",
     Time = 4,
 })
 
-print("[C00lsaken v1.5] UI + backend loaded.")
+print("[C00lsaken v1.7] Loaded.")
