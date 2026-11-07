@@ -1,7 +1,12 @@
 --[[
-    GODSAKEN UNIFIED v1.7 — REDLINE
-    - Stam tab added (max/sprint speed/gain/drain/regen delay + infinite)
-    - All v1.6 fixes preserved (cooldown-aware block, no auto-turn on CD, etc.)
+    GODSAKEN UNIFIED v1.8 — REDLINE
+    Changes:
+      - Box detection added (NIGHTSAKEN style, per-killer boxes)
+      - Detection Mode: Zone (facing) or Box (spawn+check)
+      - HDT + Anti Bait moved into Auto Block tab
+      - Box Editor: edit every killer's box dimensions
+      - HDT sliders read Default from Settings (fixes "edits ignored")
+      - Killer tab removed (was only HDT)
 ]]
 
 local Players           = game:GetService("Players")
@@ -41,10 +46,15 @@ local function _num(v, d) return tonumber(v) or d end
 -- SETTINGS
 --═══════════════════════════════════════════════════════════════════
 local Settings = {
-    AB_Enabled     = false,
-    AB_Mode        = "Guest1337",
-    AB_ShowZone    = true,
-    AB_FacingMode  = "Circle",
+    -- Auto Block
+    AB_Enabled       = false,
+    AB_Mode          = "Guest1337",      -- "Guest1337" | "007n7"
+    AB_DetectionMode = "Zone",            -- "Zone" | "Box"
+    AB_ShowZone      = true,              -- visual only in Zone mode
+    AB_ShowBox       = false,             -- visual only in Box mode
+
+    -- Facing zone (Zone mode)
+    AB_FacingMode    = "Circle",
     AB_CircleRadius  = 8,
     AB_DotRadius     = 5,
     AB_DotDistance   = 4,
@@ -52,14 +62,58 @@ local Settings = {
     AB_DiamondWidth  = 4,
     AB_DiamondOffset = 3,
 
-    ABT_Enabled = false, ABT_Duration = 0.5,
-    AP_Enabled = false, AP_Delay = 0.5,
-    PA_Enabled = false, PA_Prediction = 4,
-    HDT_Enabled = false, HDT_Speed = 40, HDT_Delay = 0.05, HDT_Duration = 0.6,
-    AIM_Enabled = false, AIM_Mode = "Character", AIM_Prediction = 4,
-    AIM_LockTime = 0.7, AIM_MinDist = 3, AIM_Range = 55,
-    AIM_OnSlash = true, AIM_OnBlock = true, AIM_OnDagger = true,
-    AIM_OnAxe = true, AIM_OnShoot = true,
+    -- Box spam (Box mode)
+    AB_SpamEnabled  = true,
+    AB_SpamCount    = 4,
+    AB_SpamDuration = 0.05,
+
+    -- Per-killer box sizes (Box mode)
+    KillerHitbox = {
+        ["Default"]   = { width=6, height=6, length=9, distance=3, dura=0.26 },
+        ["CoolKid"]   = { width=5, height=6, length=7, distance=3, dura=0.05 },
+        ["Slasher"]   = { width=6, height=6, length=9, distance=3, dura=0.35 },
+        ["1x1x1x1"]   = { width=6, height=6, length=9, distance=3, dura=0.45 },
+        ["JohnDoe"]   = { width=6, height=6, length=9, distance=3, dura=0.45 },
+        ["John Doe"]  = { width=6, height=6, length=9, distance=3, dura=0.45 },
+        ["Nosferatu"] = { width=6, height=6, length=9, distance=3, dura=0.42 },
+        ["Sixer"]     = { width=6, height=6, length=9, distance=6, dura=0.42 },
+        ["Noli"]      = { width=6, height=6, length=9, distance=3, dura=0.37 },
+        ["Azure"]     = { width=6, height=6, length=9, distance=3, dura=0.35 },
+    },
+    SelectedKillerBox = "Default",
+
+    -- Anti Bait
+    ABT_Enabled  = false,
+    ABT_Duration = 0.5,
+
+    -- HDT (defaults now used as UI defaults too)
+    HDT_Enabled  = false,
+    HDT_Speed    = 40,
+    HDT_Delay    = 0.05,
+    HDT_Duration = 0.6,
+
+    -- Auto Parry
+    AP_Enabled = false,
+    AP_Delay   = 0.5,
+
+    -- Punch Aim
+    PA_Enabled    = false,
+    PA_Prediction = 4,
+
+    -- Survivor Auto Aim
+    AIM_Enabled    = false,
+    AIM_Mode       = "Character",
+    AIM_Prediction = 4,
+    AIM_LockTime   = 0.7,
+    AIM_MinDist    = 3,
+    AIM_Range      = 55,
+    AIM_OnSlash    = true,
+    AIM_OnBlock    = true,
+    AIM_OnDagger   = true,
+    AIM_OnAxe      = true,
+    AIM_OnShoot    = true,
+
+    -- ESP
     ESP_Killer = false, ESP_Survivor = false, ESP_Generator = false,
     ESP_Medkit = false, ESP_Bloxy = false,
     ESP_WallCheck = false, ESP_MaxDist = 150,
@@ -109,11 +163,20 @@ for _, id in ipairs({
 }) do HDT_Anims["rbxassetid://"..id] = true end
 
 --═══════════════════════════════════════════════════════════════════
--- AUTO BLOCK
+-- AUTO BLOCK (raw attribute + Zone or Box detection)
 --═══════════════════════════════════════════════════════════════════
 local AB = { running=false, loop=nil, attrState={}, visual={}, lastBlock=0 }
 local PLAYER_R = 1.5
 local RED, GREEN = Color3.fromRGB(255,70,70), Color3.fromRGB(70,255,120)
+
+-- Box config resolver
+local function getHitboxConfig(killerName)
+    if not killerName then return Settings.KillerHitbox["Default"] end
+    for name, cfg in pairs(Settings.KillerHitbox) do
+        if string.find(killerName, name, 1, true) then return cfg end
+    end
+    return Settings.KillerHitbox["Default"]
+end
 
 local function AB_IsInZone(myPos, killerRoot)
     local mode = Settings.AB_FacingMode
@@ -149,11 +212,11 @@ end
 
 local function AB_IsBlockReady()
     local mainUI = PlayerGui:FindFirstChild("MainUI")
-    if not mainUI then return false end
+    if not mainUI then return true end
     local ac = mainUI:FindFirstChild("AbilityContainer")
-    if not ac then return false end
+    if not ac then return true end
     local btn = ac:FindFirstChild(Settings.AB_Mode == "007n7" and "Clone" or "Block")
-    if not btn then return false end
+    if not btn then return true end
     local cd = btn:FindFirstChild("CooldownTime")
     if not cd then return true end
     local t = cd.Text
@@ -174,6 +237,78 @@ local function AB_FireBlock()
         local sig = btn:FindFirstChildOfClass("MouseButton1Click")
         if sig then pcall(firesignal, sig) end
     end
+end
+
+local function AB_FireSpam()
+    if not NetworkEvent then return end
+    local name = Settings.AB_Mode == "007n7" and "Clone" or "Block"
+    local count = math.max(1, tonumber(Settings.AB_SpamCount) or 4)
+    for i = 1, count do
+        task.spawn(function()
+            pcall(function() NetworkEvent:FireServer("UseActorAbility", {name}) end)
+        end)
+    end
+    local dur = tonumber(Settings.AB_SpamDuration) or 0.05
+    if dur > 0 then
+        task.spawn(function()
+            local endT = tick() + dur
+            while tick() < endT do
+                pcall(function() NetworkEvent:FireServer("UseActorAbility", {name}) end)
+                task.wait(0.001)
+            end
+        end)
+    end
+end
+
+-- Box detection: spawn killer hitbox for `dura` seconds, fire on contact
+local function AB_BoxDetect(killer)
+    if not killer or not killer.Parent then return end
+    local killerRoot = killer:FindFirstChild("HumanoidRootPart") or killer:FindFirstChild("RootPart")
+    if not killerRoot then return end
+    local cfg = getHitboxConfig(killer.Name)
+    local size = Vector3.new(cfg.width, cfg.height, cfg.length)
+    local op = OverlapParams.new()
+    op.FilterType = Enum.RaycastFilterType.Exclude
+    op.FilterDescendantsInstances = { killer }
+
+    task.spawn(function()
+        local startTime = tick()
+        local blocked = false
+        while tick() - startTime < cfg.dura and not blocked do
+            local ckr = killer:FindFirstChild("HumanoidRootPart") or killer:FindFirstChild("RootPart")
+            if not ckr or not ckr.Parent then break end
+            local hbCF = ckr.CFrame * CFrame.new(0, 0, -(cfg.distance or 3))
+            local hb = Instance.new("Part")
+            hb.Name = "GS_AB_Hitbox"
+            hb.Transparency = Settings.AB_ShowBox and 0.8 or 1
+            hb.Color = Color3.fromRGB(255, 100, 100)
+            hb.Material = Enum.Material.ForceField
+            hb.CanCollide = false; hb.CanTouch = false; hb.CanQuery = false
+            hb.CastShadow = false; hb.Anchored = true
+            hb.Size = size; hb.CFrame = hbCF
+            hb.Parent = Workspace
+
+            local inBox = false
+            for _, part in ipairs(Workspace:GetPartsInPart(hb, op)) do
+                local hum = part.Parent and part.Parent:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health > 0 and Players:GetPlayerFromCharacter(hum.Parent) == LocalPlayer then
+                    inBox = true; break
+                end
+            end
+            hb:Destroy()
+
+            if inBox then
+                blocked = true
+                if Settings.AB_SpamEnabled then
+                    AB_FireSpam()
+                else
+                    AB_FireBlock()
+                end
+                return
+            end
+            RunService.Heartbeat:Wait()
+        end
+    end)
 end
 
 local function AB_Loop()
@@ -200,11 +335,17 @@ local function AB_Loop()
                                     if st.bait then
                                         st.bait = false
                                     else
-                                        if AB_IsInZone(root.Position, hrp) and AB_IsBlockReady() then
-                                            local now = tick()
-                                            if now - AB.lastBlock >= 0.15 then
-                                                AB.lastBlock = now
-                                                AB_FireBlock()
+                                        if AB_IsBlockReady() then
+                                            if Settings.AB_DetectionMode == "Box" then
+                                                AB_BoxDetect(killer)
+                                            else
+                                                if AB_IsInZone(root.Position, hrp) then
+                                                    local now = tick()
+                                                    if now - AB.lastBlock >= 0.15 then
+                                                        AB.lastBlock = now
+                                                        AB_FireBlock()
+                                                    end
+                                                end
                                             end
                                         end
                                     end
@@ -224,6 +365,7 @@ local function AB_Loop()
     end
 end
 
+-- Zone visual
 local function AB_RemoveVisual(model)
     local v = AB.visual[model]
     if v and v.folder then v.folder:Destroy() end
@@ -239,6 +381,9 @@ end
 
 local function AB_UpdateVisual(model, hrp)
     if not hrp or not hrp.Parent then AB_RemoveVisual(model); return end
+    if Settings.AB_DetectionMode ~= "Zone" or not Settings.AB_ShowZone then
+        AB_RemoveVisual(model); return
+    end
     if not LocalRoot or not LocalRoot.Parent then return end
 
     local v = AB.visual[model]
@@ -317,7 +462,7 @@ local function AB_UpdateVisual(model, hrp)
 end
 
 RunService.RenderStepped:Connect(function()
-    if not Settings.AB_ShowZone then
+    if Settings.AB_DetectionMode ~= "Zone" or not Settings.AB_ShowZone then
         for m in pairs(AB.visual) do AB_RemoveVisual(m) end
         return
     end
@@ -509,7 +654,7 @@ local function PA_Loop()
             PA.looking = false; PA.lookStarted = nil
         end
         if PA.looking then
-            -- do nothing this frame
+            -- skip
         else
             local char = LocalPlayer.Character
             local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -585,6 +730,7 @@ local function HDT_Dash(killer)
     HDT.debounce = true
     local oWS, oAR = hum.WalkSpeed, hum.AutoRotate
     HDT.active = { hum=hum, walkSpeed=oWS, autoRotate=oAR }
+    -- read LIVE from Settings each frame so slider changes take effect instantly
     hum.WalkSpeed, hum.AutoRotate = Settings.HDT_Speed, true
     local st = tick()
 
@@ -606,6 +752,7 @@ local function HDT_Dash(killer)
         local kt = killer:FindFirstChild("HumanoidRootPart"); if not kt then stop(); return end
         local flat = Vector3.new(kt.Position.X - hrp.Position.X, 0, kt.Position.Z - hrp.Position.Z)
         if flat.Magnitude <= 2 then stop(); return end
+        -- LIVE read — every frame picks up slider changes
         hum.WalkSpeed = Settings.HDT_Speed
         hum:Move(flat.Unit, false)
         if tick() - st > Settings.HDT_Duration then stop() end
@@ -879,19 +1026,12 @@ end)
 local function ES_Refresh() for m in pairs(ESP_HL) do ES_Clear(m) end end
 
 --═══════════════════════════════════════════════════════════════════
--- STAMINA  (meowsaken-style, multi-field)
+-- STAMINA
 --═══════════════════════════════════════════════════════════════════
 local Stam = {
-    running = false,
-    thread = nil,
-    mod = nil,
-    saved = nil,
-    MaxStamina = nil,
-    SprintSpeed = nil,
-    StaminaGain = nil,
-    StaminaDrain = nil,
-    StaminaRegenDelay = nil,
-    Infinite = false,
+    running=false, thread=nil, mod=nil, saved=nil,
+    MaxStamina=nil, SprintSpeed=nil, StaminaGain=nil,
+    StaminaDrain=nil, StaminaRegenDelay=nil, Infinite=false,
 }
 
 local function Stam_GetMod()
@@ -903,37 +1043,28 @@ local function Stam_GetMod()
     return ok and m or nil
 end
 
--- Snapshot module on first access so we can restore later
 local function Stam_EnsureMod()
     if Stam.mod then return Stam.mod end
     local m = Stam_GetMod()
     if m then
         Stam.mod = m
         Stam.saved = {
-            MaxStamina        = m.MaxStamina,
-            SprintSpeed       = m.SprintSpeed,
-            StaminaGain       = m.StaminaGain,
-            StaminaDrain      = m.StaminaDrain,
-            StaminaRegenDelay = m.StaminaRegenDelay,
-            Stamina           = m.Stamina,
+            MaxStamina = m.MaxStamina, SprintSpeed = m.SprintSpeed,
+            StaminaGain = m.StaminaGain, StaminaDrain = m.StaminaDrain,
+            StaminaRegenDelay = m.StaminaRegenDelay, Stamina = m.Stamina,
         }
     end
     return m
 end
 
--- Push current user overrides to module once
 local function Stam_ApplyOnce()
-    local m = Stam_EnsureMod()
-    if not m then return end
-    if Stam.MaxStamina        ~= nil then m.MaxStamina        = Stam.MaxStamina        end
-    if Stam.SprintSpeed       ~= nil then m.SprintSpeed       = Stam.SprintSpeed       end
-    if Stam.StaminaGain       ~= nil then m.StaminaGain       = Stam.StaminaGain       end
-    if Stam.StaminaDrain      ~= nil then m.StaminaDrain      = Stam.StaminaDrain      end
+    local m = Stam_EnsureMod(); if not m then return end
+    if Stam.MaxStamina ~= nil then m.MaxStamina = Stam.MaxStamina end
+    if Stam.SprintSpeed ~= nil then m.SprintSpeed = Stam.SprintSpeed end
+    if Stam.StaminaGain ~= nil then m.StaminaGain = Stam.StaminaGain end
+    if Stam.StaminaDrain ~= nil then m.StaminaDrain = Stam.StaminaDrain end
     if Stam.StaminaRegenDelay ~= nil then m.StaminaRegenDelay = Stam.StaminaRegenDelay end
-    -- clamp live stamina to new cap
-    if Stam.MaxStamina and m.Stamina and m.Stamina > Stam.MaxStamina then
-        m.Stamina = Stam.MaxStamina
-    end
+    if Stam.MaxStamina and m.Stamina and m.Stamina > Stam.MaxStamina then m.Stamina = Stam.MaxStamina end
 end
 
 local function Stam_StartLoop()
@@ -945,10 +1076,10 @@ local function Stam_StartLoop()
             local m = Stam.mod
             if m then
                 pcall(function()
-                    if Stam.MaxStamina        ~= nil then m.MaxStamina        = Stam.MaxStamina        end
-                    if Stam.SprintSpeed       ~= nil then m.SprintSpeed       = Stam.SprintSpeed       end
-                    if Stam.StaminaGain       ~= nil then m.StaminaGain       = Stam.StaminaGain       end
-                    if Stam.StaminaDrain      ~= nil then m.StaminaDrain      = Stam.StaminaDrain      end
+                    if Stam.MaxStamina ~= nil then m.MaxStamina = Stam.MaxStamina end
+                    if Stam.SprintSpeed ~= nil then m.SprintSpeed = Stam.SprintSpeed end
+                    if Stam.StaminaGain ~= nil then m.StaminaGain = Stam.StaminaGain end
+                    if Stam.StaminaDrain ~= nil then m.StaminaDrain = Stam.StaminaDrain end
                     if Stam.StaminaRegenDelay ~= nil then m.StaminaRegenDelay = Stam.StaminaRegenDelay end
                     if Stam.Infinite then
                         m.Stamina = m.MaxStamina or 1000
@@ -965,76 +1096,56 @@ local function Stam_StopLoop()
     if Stam.thread then pcall(task.cancel, Stam.thread); Stam.thread = nil end
 end
 
--- Restore every field to original snapshot
 local function Stam_Restore()
     if Stam.mod and Stam.saved then
         pcall(function()
             local m, s = Stam.mod, Stam.saved
-            if s.MaxStamina        ~= nil then m.MaxStamina        = s.MaxStamina        end
-            if s.SprintSpeed       ~= nil then m.SprintSpeed       = s.SprintSpeed       end
-            if s.StaminaGain       ~= nil then m.StaminaGain       = s.StaminaGain       end
-            if s.StaminaDrain      ~= nil then m.StaminaDrain      = s.StaminaDrain      end
+            if s.MaxStamina ~= nil then m.MaxStamina = s.MaxStamina end
+            if s.SprintSpeed ~= nil then m.SprintSpeed = s.SprintSpeed end
+            if s.StaminaGain ~= nil then m.StaminaGain = s.StaminaGain end
+            if s.StaminaDrain ~= nil then m.StaminaDrain = s.StaminaDrain end
             if s.StaminaRegenDelay ~= nil then m.StaminaRegenDelay = s.StaminaRegenDelay end
-            if s.Stamina           ~= nil then m.Stamina           = s.Stamina           end
+            if s.Stamina ~= nil then m.Stamina = s.Stamina end
         end)
     end
-    Stam.MaxStamina = nil
-    Stam.SprintSpeed = nil
-    Stam.StaminaGain = nil
-    Stam.StaminaDrain = nil
-    Stam.StaminaRegenDelay = nil
-    Stam.Infinite = false
+    Stam.MaxStamina = nil; Stam.SprintSpeed = nil
+    Stam.StaminaGain = nil; Stam.StaminaDrain = nil
+    Stam.StaminaRegenDelay = nil; Stam.Infinite = false
 end
 
 local function Stam_SetInfinite(v)
     Stam.Infinite = v and true or false
-    if Stam.Infinite then
-        Stam_EnsureMod()
-        Stam_StartLoop()
+    if Stam.Infinite then Stam_EnsureMod(); Stam_StartLoop()
     else
         Stam_StopLoop()
-        -- undo the drain=0 that infinite wrote
         if Stam.mod and Stam.saved then
             local m, s = Stam.mod, Stam.saved
-            if Stam.StaminaDrain ~= nil then
-                m.StaminaDrain = Stam.StaminaDrain
-            elseif s.StaminaDrain ~= nil then
-                m.StaminaDrain = s.StaminaDrain
-            end
+            if Stam.StaminaDrain ~= nil then m.StaminaDrain = Stam.StaminaDrain
+            elseif s.StaminaDrain ~= nil then m.StaminaDrain = s.StaminaDrain end
         end
         Stam_ApplyOnce()
     end
 end
 
 local function Stam_SetField(field, v)
-    local n = tonumber(v)
-    if not n then return end
-    Stam[field] = n
-    Stam_EnsureMod()
-    Stam_ApplyOnce()
+    local n = tonumber(v); if not n then return end
+    Stam[field] = n; Stam_EnsureMod(); Stam_ApplyOnce()
 end
 
--- Snapshot module now so UI defaults reflect real game values
-local STAM_DEFAULT = {
-    MaxStamina = 100, SprintSpeed = 26, StaminaGain = 20,
-    StaminaDrain = 10, StaminaRegenDelay = 0.5,
-}
+local STAM_DEFAULT = { MaxStamina=100, SprintSpeed=26, StaminaGain=20, StaminaDrain=10, StaminaRegenDelay=0.5 }
 do
     local m = Stam_GetMod()
     if m then
-        if m.MaxStamina        ~= nil then STAM_DEFAULT.MaxStamina        = m.MaxStamina        end
-        if m.SprintSpeed       ~= nil then STAM_DEFAULT.SprintSpeed       = m.SprintSpeed       end
-        if m.StaminaGain       ~= nil then STAM_DEFAULT.StaminaGain       = m.StaminaGain       end
-        if m.StaminaDrain      ~= nil then STAM_DEFAULT.StaminaDrain      = m.StaminaDrain      end
+        if m.MaxStamina ~= nil then STAM_DEFAULT.MaxStamina = m.MaxStamina end
+        if m.SprintSpeed ~= nil then STAM_DEFAULT.SprintSpeed = m.SprintSpeed end
+        if m.StaminaGain ~= nil then STAM_DEFAULT.StaminaGain = m.StaminaGain end
+        if m.StaminaDrain ~= nil then STAM_DEFAULT.StaminaDrain = m.StaminaDrain end
         if m.StaminaRegenDelay ~= nil then STAM_DEFAULT.StaminaRegenDelay = m.StaminaRegenDelay end
         Stam.mod = m
         Stam.saved = {
-            MaxStamina        = m.MaxStamina,
-            SprintSpeed       = m.SprintSpeed,
-            StaminaGain       = m.StaminaGain,
-            StaminaDrain      = m.StaminaDrain,
-            StaminaRegenDelay = m.StaminaRegenDelay,
-            Stamina           = m.Stamina,
+            MaxStamina = m.MaxStamina, SprintSpeed = m.SprintSpeed,
+            StaminaGain = m.StaminaGain, StaminaDrain = m.StaminaDrain,
+            StaminaRegenDelay = m.StaminaRegenDelay, Stamina = m.Stamina,
         }
     end
 end
@@ -1046,24 +1157,37 @@ _G.Godsaken = {
     Settings = Settings,
     AutoBlock = {
         Enable=AB_Enable, Disable=AB_Disable,
-        SetMode         = function(m) Settings.AB_Mode = m end,
-        SetFacingMode   = function(m) Settings.AB_FacingMode = m end,
-        SetShowZone     = function(v) Settings.AB_ShowZone = v end,
-        SetCircleRadius = function(v) Settings.AB_CircleRadius = _num(v, 8) end,
-        SetDotRadius    = function(v) Settings.AB_DotRadius    = _num(v, 5) end,
-        SetDotDistance  = function(v) Settings.AB_DotDistance  = _num(v, 4) end,
-        SetDiamondLength= function(v) Settings.AB_DiamondLength= _num(v, 8) end,
-        SetDiamondWidth = function(v) Settings.AB_DiamondWidth = _num(v, 4) end,
-        SetDiamondOffset= function(v) Settings.AB_DiamondOffset= _num(v, 3) end,
+        SetMode           = function(m) Settings.AB_Mode = m end,
+        SetDetectionMode  = function(m) Settings.AB_DetectionMode = m end,
+        SetFacingMode     = function(m) Settings.AB_FacingMode = m end,
+        SetShowZone       = function(v) Settings.AB_ShowZone = v end,
+        SetShowBox        = function(v) Settings.AB_ShowBox = v end,
+        SetCircleRadius   = function(v) Settings.AB_CircleRadius = _num(v, 8) end,
+        SetDotRadius      = function(v) Settings.AB_DotRadius = _num(v, 5) end,
+        SetDotDistance    = function(v) Settings.AB_DotDistance = _num(v, 4) end,
+        SetDiamondLength  = function(v) Settings.AB_DiamondLength = _num(v, 8) end,
+        SetDiamondWidth   = function(v) Settings.AB_DiamondWidth = _num(v, 4) end,
+        SetDiamondOffset  = function(v) Settings.AB_DiamondOffset = _num(v, 3) end,
+        SetSpamEnabled    = function(v) Settings.AB_SpamEnabled = v end,
+        SetSpamCount      = function(v) Settings.AB_SpamCount = _num(v, 4) end,
+        SetSpamDuration   = function(v) Settings.AB_SpamDuration = _num(v, 0.05) end,
+        -- Box editor
+        SelectKillerBox   = function(name) Settings.SelectedKillerBox = name end,
+        SetBoxWidth       = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].width = _num(v, 6) end end,
+        SetBoxHeight      = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].height = _num(v, 6) end end,
+        SetBoxLength      = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].length = _num(v, 9) end end,
+        SetBoxDistance    = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].distance = _num(v, 3) end end,
+        SetBoxDura        = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].dura = _num(v, 0.26) end end,
+        GetBox            = function(name) return Settings.KillerHitbox[name or Settings.SelectedKillerBox] end,
     },
     AntiBait = { Enable=ABT_Enable, Disable=ABT_Disable, SetDuration=function(v) Settings.ABT_Duration=_num(v,0.5) end },
     AutoParry = { Enable=AP_Enable, Disable=AP_Disable, SetDelay=function(v) Settings.AP_Delay=_num(v,0.5) end },
     PunchAim = { Enable=PA_Enable, Disable=PA_Disable, SetPrediction=function(v) Settings.PA_Prediction=_num(v,4) end },
     HDT = {
         Enable=HDT_Enable, Disable=HDT_Disable,
-        SetSpeed    = function(v) Settings.HDT_Speed    = _num(v,40)   end,
-        SetDelay    = function(v) Settings.HDT_Delay    = _num(v,0.05) end,
-        SetDuration = function(v) Settings.HDT_Duration = _num(v,0.6)  end,
+        SetSpeed    = function(v) Settings.HDT_Speed    = _num(v, 40)   end,
+        SetDelay    = function(v) Settings.HDT_Delay    = _num(v, 0.05) end,
+        SetDuration = function(v) Settings.HDT_Duration = _num(v, 0.6)  end,
     },
     SurvivorAim = {
         Enable  = function() Settings.AIM_Enabled = true; Aim_SetupHook() end,
@@ -1116,12 +1240,12 @@ local ThemeManager = loadstring(game:HttpGet(REPO .. "addons/ThemeManager.lua"))
 ThemeManager:SetLibrary(Library)
 ThemeManager:SetFolder("C00lsaken")
 ThemeManager:SetDefaultTheme({
-    FontColor       = Color3.fromRGB(245, 235, 235),
-    MainColor       = Color3.fromRGB(34, 15, 18),
-    AccentColor     = Color3.fromRGB(220, 35, 55),
+    FontColor = Color3.fromRGB(245, 235, 235),
+    MainColor = Color3.fromRGB(34, 15, 18),
+    AccentColor = Color3.fromRGB(220, 35, 55),
     BackgroundColor = Color3.fromRGB(15, 10, 12),
-    OutlineColor    = Color3.fromRGB(95, 28, 38),
-    FontFace        = Enum.Font.Code,
+    OutlineColor = Color3.fromRGB(95, 28, 38),
+    FontFace = Enum.Font.Code,
     BackgroundImage = "",
 })
 Library.ForceCheckbox = false
@@ -1130,7 +1254,7 @@ Library.NotifySide = "Right"
 
 local Window = Library:CreateWindow({
     Title = "C00lsaken",
-    Footer = "REDLINE  |  v1.7",
+    Footer = "REDLINE  |  v1.8",
     ToggleKeybind = Enum.KeyCode.RightControl,
     Center = true, AutoShow = true, Resizable = true,
     ShowCustomCursor = false, MobileButtonsSide = "Right",
@@ -1140,7 +1264,6 @@ local Tabs = {
     AutoBlock  = Window:AddTab("Auto Block", "shield"),
     Survivor   = Window:AddTab("Survivor",   "swords"),
     Stamina    = Window:AddTab("Stamina",    "zap"),
-    Killer     = Window:AddTab("Killer",     "crosshair"),
     Visuals    = Window:AddTab("Visuals",    "eye"),
     Appearance = Window:AddTab("Appearance", "palette"),
     Credits    = Window:AddTab("Credits",    "users"),
@@ -1149,115 +1272,231 @@ local Tabs = {
 --═══════════════════════════════════════════════════════════════════
 -- AUTO BLOCK TAB
 --═══════════════════════════════════════════════════════════════════
-local ABLeft = Tabs.AutoBlock:AddLeftGroupbox("Auto Block (Raw)")
-ABLeft:AddToggle("AB_Enable_T", {
+
+-- Auto Block groupbox
+local ABMain = Tabs.AutoBlock:AddLeftGroupbox("Auto Block")
+ABMain:AddToggle("AB_Enable_T", {
     Text = "Enable Auto Block", Default = false,
     Callback = function(v) if v then _G.Godsaken.AutoBlock.Enable() else _G.Godsaken.AutoBlock.Disable() end end,
 })
-ABLeft:AddDropdown("AB_Mode_D", {
+ABMain:AddDropdown("AB_Mode_D", {
     Text = "Block Ability", Values = { "Guest1337", "007n7" },
     Default = "Guest1337", Multi = false,
     Callback = function(v) _G.Godsaken.AutoBlock.SetMode(v) end,
 })
-ABLeft:AddToggle("AB_ShowZone_T", {
-    Text = "Show Zone Visual", Default = true,
+ABMain:AddDropdown("AB_Detect_D", {
+    Text = "Detection Mode", Values = { "Zone", "Box" },
+    Default = Settings.AB_DetectionMode, Multi = false,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetDetectionMode(v) end,
+})
+ABMain:AddToggle("AB_ShowZone_T", {
+    Text = "Show Zone Visual (Zone mode)", Default = Settings.AB_ShowZone,
     Callback = function(v) _G.Godsaken.AutoBlock.SetShowZone(v) end,
 })
+ABMain:AddToggle("AB_ShowBox_T", {
+    Text = "Show Box Visual (Box mode)", Default = Settings.AB_ShowBox,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetShowBox(v) end,
+})
 
-local ABRight = Tabs.AutoBlock:AddRightGroupbox("Facing Zone")
+-- HDT groupbox (moved from Killer tab)
+local HK = Tabs.AutoBlock:AddLeftGroupbox("HDT")
+HK:AddToggle("HDT_T", {
+    Text = "Enable HDT", Default = Settings.HDT_Enabled,
+    Callback = function(v) if v then _G.Godsaken.HDT.Enable() else _G.Godsaken.HDT.Disable() end end,
+})
+HK:AddSlider("HDT_Spd", {
+    Text = "Speed", Default = Settings.HDT_Speed, Min = 5, Max = 200, Rounding = 0,
+    Callback = function(v) _G.Godsaken.HDT.SetSpeed(v) end,
+})
+HK:AddSlider("HDT_Delay", {
+    Text = "Delay", Default = Settings.HDT_Delay, Min = 0, Max = 1, Rounding = 2,
+    Callback = function(v) _G.Godsaken.HDT.SetDelay(v) end,
+})
+HK:AddSlider("HDT_Dur", {
+    Text = "Duration", Default = Settings.HDT_Duration, Min = 0.1, Max = 2, Rounding = 2,
+    Callback = function(v) _G.Godsaken.HDT.SetDuration(v) end,
+})
+
+-- Anti Bait groupbox (moved from Survivor tab)
+local ABT = Tabs.AutoBlock:AddLeftGroupbox("Anti Bait")
+ABT:AddToggle("ABT_T", {
+    Text = "Enable Anti Bait", Default = Settings.ABT_Enabled,
+    Callback = function(v) if v then _G.Godsaken.AntiBait.Enable() else _G.Godsaken.AntiBait.Disable() end end,
+})
+ABT:AddSlider("ABT_Dur", {
+    Text = "Duration", Default = Settings.ABT_Duration, Min = 0, Max = 3, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AntiBait.SetDuration(v) end,
+})
+
+-- Spam Settings groupbox
+local SPS = Tabs.AutoBlock:AddLeftGroupbox("Box Spam (Box mode)")
+SPS:AddToggle("AB_SpamEn_T", {
+    Text = "Enable Spam", Default = Settings.AB_SpamEnabled,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetSpamEnabled(v) end,
+})
+SPS:AddSlider("AB_SpamCount_S", {
+    Text = "Spam Count", Default = Settings.AB_SpamCount, Min = 1, Max = 10, Rounding = 0,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetSpamCount(v) end,
+})
+SPS:AddSlider("AB_SpamDur_S", {
+    Text = "Spam Duration", Default = Settings.AB_SpamDuration, Min = 0, Max = 0.5, Rounding = 3,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetSpamDuration(v) end,
+})
+
+-- Facing Zone (right column)
+local ABRight = Tabs.AutoBlock:AddRightGroupbox("Facing Zone (Zone mode)")
 ABRight:AddDropdown("AB_FacingMode_D", {
     Text = "Zone Type (only one active)",
     Values = { "Circle", "Dot", "Diamond" },
-    Default = "Circle", Multi = false,
+    Default = Settings.AB_FacingMode, Multi = false,
     Callback = function(v) _G.Godsaken.AutoBlock.SetFacingMode(v) end,
 })
 ABRight:AddLabel({ Text = "Circle  = around killer", DoesWrap = true })
 ABRight:AddLabel({ Text = "Dot     = circle in front of killer", DoesWrap = true })
 ABRight:AddLabel({ Text = "Diamond = rhombus in front of killer", DoesWrap = true })
 
-local ABE1 = Tabs.AutoBlock:AddLeftGroupbox("Zone Editor - Circle")
+local ABE1 = Tabs.AutoBlock:AddRightGroupbox("Zone Editor - Circle / Dot")
 ABE1:AddSlider("AB_CircleRadius_S", {
-    Text = "Circle Radius",
-    Default = 8, Min = 2, Max = 30, Rounding = 1,
+    Text = "Circle Radius", Default = Settings.AB_CircleRadius, Min = 2, Max = 30, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetCircleRadius(v) end,
 })
-
-local ABE2 = Tabs.AutoBlock:AddRightGroupbox("Zone Editor - Dot")
-ABE2:AddSlider("AB_DotRadius_S", {
-    Text = "Dot Radius", Default = 5, Min = 1, Max = 20, Rounding = 1,
+ABE1:AddSlider("AB_DotRadius_S", {
+    Text = "Dot Radius", Default = Settings.AB_DotRadius, Min = 1, Max = 20, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDotRadius(v) end,
 })
-ABE2:AddSlider("AB_DotDistance_S", {
-    Text = "Distance from Killer", Default = 4, Min = 0, Max = 20, Rounding = 1,
+ABE1:AddSlider("AB_DotDistance_S", {
+    Text = "Dot Distance from Killer", Default = Settings.AB_DotDistance, Min = 0, Max = 20, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDotDistance(v) end,
 })
 
-local ABE3 = Tabs.AutoBlock:AddLeftGroupbox("Zone Editor - Diamond")
-ABE3:AddSlider("AB_DiamondLength_S", {
-    Text = "Length", Default = 8, Min = 2, Max = 30, Rounding = 1,
+local ABE2 = Tabs.AutoBlock:AddRightGroupbox("Zone Editor - Diamond")
+ABE2:AddSlider("AB_DiamondLength_S", {
+    Text = "Length", Default = Settings.AB_DiamondLength, Min = 2, Max = 30, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDiamondLength(v) end,
 })
-ABE3:AddSlider("AB_DiamondWidth_S", {
-    Text = "Width", Default = 4, Min = 1, Max = 20, Rounding = 1,
+ABE2:AddSlider("AB_DiamondWidth_S", {
+    Text = "Width", Default = Settings.AB_DiamondWidth, Min = 1, Max = 20, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDiamondWidth(v) end,
 })
-ABE3:AddSlider("AB_DiamondOffset_S", {
-    Text = "Offset from Killer", Default = 3, Min = 0, Max = 20, Rounding = 1,
+ABE2:AddSlider("AB_DiamondOffset_S", {
+    Text = "Offset from Killer", Default = Settings.AB_DiamondOffset, Min = 0, Max = 20, Rounding = 1,
     Callback = function(v) _G.Godsaken.AutoBlock.SetDiamondOffset(v) end,
 })
 
---═══════════════════════════════════════════════════════════════════
--- SURVIVOR
---═══════════════════════════════════════════════════════════════════
-local SAB = Tabs.Survivor:AddLeftGroupbox("Anti Bait")
-SAB:AddToggle("ABT_T", {
-    Text = "Anti Bait (Blatant)", Default = false,
-    Callback = function(v) if v then _G.Godsaken.AntiBait.Enable() else _G.Godsaken.AntiBait.Disable() end end,
-})
-SAB:AddSlider("ABT_Dur", {
-    Text = "Duration", Default = 0.5, Min = 0, Max = 3, Rounding = 1,
-    Callback = function(v) _G.Godsaken.AntiBait.SetDuration(v) end,
+-- Box Editor (right column)
+local BXE = Tabs.AutoBlock:AddRightGroupbox("Box Editor (Box mode)")
+
+local BoxSliders = {}
+
+local function refreshBoxSliders(name)
+    local cfg = Settings.KillerHitbox[name] or Settings.KillerHitbox["Default"]
+    if BoxSliders.Width    then pcall(function() BoxSliders.Width:Set(cfg.width)    end) end
+    if BoxSliders.Height   then pcall(function() BoxSliders.Height:Set(cfg.height)  end) end
+    if BoxSliders.Length   then pcall(function() BoxSliders.Length:Set(cfg.length)  end) end
+    if BoxSliders.Distance then pcall(function() BoxSliders.Distance:Set(cfg.distance) end) end
+    if BoxSliders.Dura     then pcall(function() BoxSliders.Dura:Set(cfg.dura)      end) end
+end
+
+BXE:AddDropdown("Box_Killer_D", {
+    Text = "Select Killer",
+    Values = { "Default", "CoolKid", "Slasher", "1x1x1x1", "JohnDoe", "John Doe", "Nosferatu", "Sixer", "Noli", "Azure" },
+    Default = Settings.SelectedKillerBox, Multi = false,
+    Callback = function(name)
+        Settings.SelectedKillerBox = name
+        refreshBoxSliders(name)
+    end,
 })
 
-local SPB = Tabs.Survivor:AddRightGroupbox("Auto Parry & Punch Aim")
+local boxDefaultCfg = Settings.KillerHitbox[Settings.SelectedKillerBox] or Settings.KillerHitbox["Default"]
+
+BoxSliders.Width = BXE:AddSlider("Box_W_S", {
+    Text = "Width", Default = boxDefaultCfg.width, Min = 1, Max = 20, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetBoxWidth(v) end,
+})
+BoxSliders.Height = BXE:AddSlider("Box_H_S", {
+    Text = "Height", Default = boxDefaultCfg.height, Min = 1, Max = 20, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetBoxHeight(v) end,
+})
+BoxSliders.Length = BXE:AddSlider("Box_L_S", {
+    Text = "Length", Default = boxDefaultCfg.length, Min = 1, Max = 30, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetBoxLength(v) end,
+})
+BoxSliders.Distance = BXE:AddSlider("Box_D_S", {
+    Text = "Distance from Killer", Default = boxDefaultCfg.distance, Min = 0, Max = 15, Rounding = 1,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetBoxDistance(v) end,
+})
+BoxSliders.Dura = BXE:AddSlider("Box_Du_S", {
+    Text = "Dura (window sec)", Default = boxDefaultCfg.dura, Min = 0.01, Max = 1, Rounding = 2,
+    Callback = function(v) _G.Godsaken.AutoBlock.SetBoxDura(v) end,
+})
+
+BXE:AddButton({
+    Text = "Reset Selected to Original",
+    Func = function()
+        local name = Settings.SelectedKillerBox
+        local originals = {
+            ["Default"]   = { width=6, height=6, length=9, distance=3, dura=0.26 },
+            ["CoolKid"]   = { width=5, height=6, length=7, distance=3, dura=0.05 },
+            ["Slasher"]   = { width=6, height=6, length=9, distance=3, dura=0.35 },
+            ["1x1x1x1"]   = { width=6, height=6, length=9, distance=3, dura=0.45 },
+            ["JohnDoe"]   = { width=6, height=6, length=9, distance=3, dura=0.45 },
+            ["John Doe"]  = { width=6, height=6, length=9, distance=3, dura=0.45 },
+            ["Nosferatu"] = { width=6, height=6, length=9, distance=3, dura=0.42 },
+            ["Sixer"]     = { width=6, height=6, length=9, distance=6, dura=0.42 },
+            ["Noli"]      = { width=6, height=6, length=9, distance=3, dura=0.37 },
+            ["Azure"]     = { width=6, height=6, length=9, distance=3, dura=0.35 },
+        }
+        if originals[name] and Settings.KillerHitbox[name] then
+            for k, v in pairs(originals[name]) do
+                Settings.KillerHitbox[name][k] = v
+            end
+            refreshBoxSliders(name)
+        end
+    end,
+})
+
+--═══════════════════════════════════════════════════════════════════
+-- SURVIVOR TAB
+--═══════════════════════════════════════════════════════════════════
+local SPB = Tabs.Survivor:AddLeftGroupbox("Auto Parry & Punch Aim")
 SPB:AddToggle("AP_T", {
-    Text = "Auto Parry", Default = false,
+    Text = "Auto Parry", Default = Settings.AP_Enabled,
     Callback = function(v) if v then _G.Godsaken.AutoParry.Enable() else _G.Godsaken.AutoParry.Disable() end end,
 })
 SPB:AddSlider("AP_Delay", {
-    Text = "Parry Delay", Default = 0.5, Min = 0, Max = 1, Rounding = 2,
+    Text = "Parry Delay", Default = Settings.AP_Delay, Min = 0, Max = 1, Rounding = 2,
     Callback = function(v) _G.Godsaken.AutoParry.SetDelay(v) end,
 })
 SPB:AddDivider()
 SPB:AddToggle("PA_T", {
-    Text = "Punch Aim", Default = false,
+    Text = "Punch Aim", Default = Settings.PA_Enabled,
     Callback = function(v) if v then _G.Godsaken.PunchAim.Enable() else _G.Godsaken.PunchAim.Disable() end end,
 })
 SPB:AddSlider("PA_Pred", {
-    Text = "Punch Prediction", Default = 4, Min = 0, Max = 20, Rounding = 0,
+    Text = "Punch Prediction", Default = Settings.PA_Prediction, Min = 0, Max = 20, Rounding = 0,
     Callback = function(v) _G.Godsaken.PunchAim.SetPrediction(v) end,
 })
 
 local SAim = Tabs.Survivor:AddLeftGroupbox("Survivor Auto Aim")
 SAim:AddToggle("AIM_T", {
-    Text = "Enable Auto Aim", Default = false,
+    Text = "Enable Auto Aim", Default = Settings.AIM_Enabled,
     Callback = function(v) if v then _G.Godsaken.SurvivorAim.Enable() else _G.Godsaken.SurvivorAim.Disable() end end,
 })
 SAim:AddDropdown("AIM_M", {
     Text = "Aim Mode", Values = {"Character","Camera","Both"},
-    Default = "Character", Multi = false,
+    Default = Settings.AIM_Mode, Multi = false,
     Callback = function(v) _G.Godsaken.SurvivorAim.SetMode(v) end,
 })
 SAim:AddSlider("AIM_Pred", {
-    Text = "Prediction (1-10)", Default = 4, Min = 1, Max = 10, Rounding = 0,
+    Text = "Prediction (1-10)", Default = Settings.AIM_Prediction, Min = 1, Max = 10, Rounding = 0,
     Callback = function(v) _G.Godsaken.SurvivorAim.SetPrediction(v) end,
 })
 SAim:AddSlider("AIM_Lock", {
-    Text = "Lock Time", Default = 0.7, Min = 0.1, Max = 3, Rounding = 2,
+    Text = "Lock Time", Default = Settings.AIM_LockTime, Min = 0.1, Max = 3, Rounding = 2,
     Callback = function(v) _G.Godsaken.SurvivorAim.SetLockTime(v) end,
 })
 SAim:AddSlider("AIM_Range", {
-    Text = "Range", Default = 55, Min = 5, Max = 200, Rounding = 0,
+    Text = "Range", Default = Settings.AIM_Range, Min = 5, Max = 200, Rounding = 0,
     Callback = function(v) _G.Godsaken.SurvivorAim.SetRange(v) end,
 })
 
@@ -1279,64 +1518,30 @@ STInf:AddToggle("Stam_Inf_T", {
 STInf:AddDivider()
 STInf:AddButton({
     Text = "Restore Original Values",
-    Func = function()
-        _G.Godsaken.Stamina.Restore()
-    end,
+    Func = function() _G.Godsaken.Stamina.Restore() end,
 })
-STInf:AddLabel({ Text = "Restores game stamina module and clears all overrides.", DoesWrap = true })
+STInf:AddLabel({ Text = "Restores the game stamina module and clears all overrides.", DoesWrap = true })
 
 local STOvr = Tabs.Stamina:AddRightGroupbox("Stamina Overrides")
-STOvr:AddLabel({ Text = "Enable a slider to override that field.", DoesWrap = true })
 STOvr:AddSlider("Stam_Max_S", {
-    Text = "Max Stamina",
-    Default = STAM_DEFAULT.MaxStamina,
-    Min = 1, Max = 1000, Rounding = 0,
+    Text = "Max Stamina", Default = STAM_DEFAULT.MaxStamina, Min = 1, Max = 1000, Rounding = 0,
     Callback = function(v) _G.Godsaken.Stamina.SetMaxStamina(v) end,
 })
 STOvr:AddSlider("Stam_Sprint_S", {
-    Text = "Sprint Speed",
-    Default = STAM_DEFAULT.SprintSpeed,
-    Min = 1, Max = 60, Rounding = 0,
+    Text = "Sprint Speed", Default = STAM_DEFAULT.SprintSpeed, Min = 1, Max = 60, Rounding = 0,
     Callback = function(v) _G.Godsaken.Stamina.SetSprintSpeed(v) end,
 })
 STOvr:AddSlider("Stam_Gain_S", {
-    Text = "Stamina Gain",
-    Default = STAM_DEFAULT.StaminaGain,
-    Min = 1, Max = 1000, Rounding = 0,
+    Text = "Stamina Gain", Default = STAM_DEFAULT.StaminaGain, Min = 1, Max = 1000, Rounding = 0,
     Callback = function(v) _G.Godsaken.Stamina.SetStaminaGain(v) end,
 })
 STOvr:AddSlider("Stam_Drain_S", {
-    Text = "Stamina Drain",
-    Default = STAM_DEFAULT.StaminaDrain,
-    Min = 0, Max = 1000, Rounding = 0,
+    Text = "Stamina Drain", Default = STAM_DEFAULT.StaminaDrain, Min = 0, Max = 1000, Rounding = 0,
     Callback = function(v) _G.Godsaken.Stamina.SetStaminaDrain(v) end,
 })
 STOvr:AddSlider("Stam_Regen_S", {
-    Text = "Regen Delay (s)",
-    Default = STAM_DEFAULT.StaminaRegenDelay,
-    Min = 0, Max = 10, Rounding = 2,
+    Text = "Regen Delay (s)", Default = STAM_DEFAULT.StaminaRegenDelay, Min = 0, Max = 10, Rounding = 2,
     Callback = function(v) _G.Godsaken.Stamina.SetRegenDelay(v) end,
-})
-
---═══════════════════════════════════════════════════════════════════
--- KILLER
---═══════════════════════════════════════════════════════════════════
-local HK = Tabs.Killer:AddLeftGroupbox("Hitbox Dragging Tech (HDT)")
-HK:AddToggle("HDT_T", {
-    Text = "Enable HDT", Default = false,
-    Callback = function(v) if v then _G.Godsaken.HDT.Enable() else _G.Godsaken.HDT.Disable() end end,
-})
-HK:AddSlider("HDT_Spd", {
-    Text = "Speed", Default = 40, Min = 5, Max = 200, Rounding = 0,
-    Callback = function(v) _G.Godsaken.HDT.SetSpeed(v) end,
-})
-HK:AddSlider("HDT_Delay", {
-    Text = "Delay", Default = 0.05, Min = 0, Max = 1, Rounding = 2,
-    Callback = function(v) _G.Godsaken.HDT.SetDelay(v) end,
-})
-HK:AddSlider("HDT_Dur", {
-    Text = "Duration", Default = 0.6, Min = 0.1, Max = 2, Rounding = 2,
-    Callback = function(v) _G.Godsaken.HDT.SetDuration(v) end,
 })
 
 --═══════════════════════════════════════════════════════════════════
@@ -1374,8 +1579,8 @@ CB:AddLabel({ Text = "Helpers: Viltrumite & Ivy", DoesWrap = true })
 
 local AbBox = Tabs.Credits:AddRightGroupbox("ABOUT")
 AbBox:AddLabel({ Text = "C00lsaken Redline", Size = 16 })
-AbBox:AddLabel({ Text = "Raw auto block + Circle/Dot/Diamond facing zones + full Stamina control.", DoesWrap = true })
-AbBox:AddLabel({ Text = "v1.7 — Stam tab added.", DoesWrap = true })
+AbBox:AddLabel({ Text = "Raw attribute auto block. Zone (facing) or Box (spawn+check) detection.", DoesWrap = true })
+AbBox:AddLabel({ Text = "v1.8 — box editor + HDT default fix.", DoesWrap = true })
 
 ThemeManager:LoadDefault()
 
@@ -1390,9 +1595,9 @@ Library:OnUnload(function()
 end)
 
 Library:Notify({
-    Title = "C00lsaken v1.7",
-    Description = "Stam tab added — infinite + full overrides",
+    Title = "C00lsaken v1.8",
+    Description = "Box detection added — edit per-killer boxes",
     Time = 4,
 })
 
-print("[C00lsaken v1.7] Loaded.")
+print("[C00lsaken v1.8] Loaded.")
