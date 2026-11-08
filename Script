@@ -1,10 +1,8 @@
 --[[
-    C00LSAKEN v3.2 — Merged build
-    Core:      Auto Block / HDT / Punch Aim / Survivor Aim / ESP / Stamina / Killer M1 / Gen Solver
-    Added:     Silent Aim / Manual Aimbot / Hitbox Expander / Anti-Debuffs / Anti-Bait utilities
-               Vee / Guest / Shedletsky / Chance / Jane Doe / Elliot / Two Time / 007n7 exploits
-               Noli / Nosferatu / Slasher killer exploits
-    UI:        Mini5 (Cursedsaken native — Cursed theme)
+    C00LSAKEN v3.3 — Merged build (FIXED)
+    - Buffer-safe ability buffers (works on executors without buffer)
+    - Red theme forced (Rose / Blood / Ruby fallback chain)
+    UI:        Mini5 (Cursedsaken native)
     Toggle UI: RightControl
 ]]
 
@@ -142,26 +140,38 @@ local AntiBaitAnims = _idTable({100926346851492,102517104852347,115706752305794,
 local HDT_Anims = _idTable({72722244508749,96959123077498,95802026624883,140671644163156,100926346851492})
 
 --═══════════════════════════════════════════════════════════════════
--- ABILITY BUFFERS
+-- ABILITY BUFFERS — FIXED (buffer-safe)
 --═══════════════════════════════════════════════════════════════════
+local _hasBuffer = (buffer ~= nil and buffer.create ~= nil and buffer.writeu8 ~= nil)
+
 local function _pack(bytes)
-    local b = buffer.create(#bytes)
-    for i = 1, #bytes do buffer.writeu8(b, i-1, bytes[i]) end
-    return b
+    if not _hasBuffer then return nil end
+    local ok, result = pcall(function()
+        local b = buffer.create(#bytes)
+        for i = 1, #bytes do buffer.writeu8(b, i-1, bytes[i]) end
+        return b
+    end)
+    return ok and result or nil
 end
-local ABILITY_BUF = {
-    Block    = _pack({3, 5, 0, 0, 0, 66, 108, 111, 99, 107}),
-    Clone    = _pack({3, 5, 0, 0, 0, 67, 108, 111, 110, 101}),
-    Punch    = _pack({3, 5, 0, 0, 0, 80, 117, 110, 99, 104}),
-    Slash    = _pack({3, 5, 0, 0, 0, 83, 108, 97, 115, 104}),
-    Stab     = _pack({3, 4, 0, 0, 0, 83, 116, 97, 98}),
-    Dagger   = _pack({3, 6, 0, 0, 0, 68, 97, 103, 103, 101, 114}),
-    Shoot    = _pack({3, 5, 0, 0, 0, 83, 104, 111, 111, 116}),
-    CoinFlip = _pack({3, 8, 0, 0, 0, 67, 111, 105, 110, 70, 108, 105, 112}),
-    Crystal  = _pack({3, 7, 0, 0, 0, 67, 114, 121, 115, 116, 97, 108}),
-    Axe      = _pack({3, 3, 0, 0, 0, 65, 120, 101}),
-    Nova     = _pack({3, 4, 0, 0, 0, 78, 111, 118, 97}),
-}
+
+local ABILITY_BUF = {}
+if _hasBuffer then
+    pcall(function()
+        ABILITY_BUF.Block    = _pack({3, 5, 0, 0, 0, 66, 108, 111, 99, 107})
+        ABILITY_BUF.Clone    = _pack({3, 5, 0, 0, 0, 67, 108, 111, 110, 101})
+        ABILITY_BUF.Punch    = _pack({3, 5, 0, 0, 0, 80, 117, 110, 99, 104})
+        ABILITY_BUF.Slash    = _pack({3, 5, 0, 0, 0, 83, 108, 97, 115, 104})
+        ABILITY_BUF.Stab     = _pack({3, 4, 0, 0, 0, 83, 116, 97, 98})
+        ABILITY_BUF.Dagger   = _pack({3, 6, 0, 0, 0, 68, 97, 103, 103, 101, 114})
+        ABILITY_BUF.Shoot    = _pack({3, 5, 0, 0, 0, 83, 104, 111, 111, 116})
+        ABILITY_BUF.CoinFlip = _pack({3, 8, 0, 0, 0, 67, 111, 105, 110, 70, 108, 105, 112})
+        ABILITY_BUF.Crystal  = _pack({3, 7, 0, 0, 0, 67, 114, 121, 115, 116, 97, 108})
+        ABILITY_BUF.Axe      = _pack({3, 3, 0, 0, 0, 65, 120, 101})
+        ABILITY_BUF.Nova     = _pack({3, 4, 0, 0, 0, 78, 111, 118, 97})
+    end)
+end
+print("[C00lsaken] Buffer support:", _hasBuffer)
+
 local function FireAbilityBuf(name)
     if not NetworkEvent then return end
     local buf = ABILITY_BUF[name]
@@ -169,6 +179,7 @@ local function FireAbilityBuf(name)
         pcall(function() NetworkEvent:FireServer("UseActorAbility", { buf }) end)
     else
         pcall(function() NetworkEvent:FireServer("UseActorAbility", { name }) end)
+        pcall(function() NetworkEvent:FireServer("UseActorAbility", name) end)
     end
 end
 
@@ -736,6 +747,7 @@ local function ExtractAbility(arg)
     local t = type(arg)
     if t == "string" then return arg end
     if t == "buffer" then
+        if not _hasBuffer then return nil end
         local ok, s = pcall(function()
             local len = buffer.readu8(arg, 1)
             if len < 1 or len > 64 then return nil end
@@ -2003,7 +2015,7 @@ _G.C00lsaken = {
 }
 
 --═══════════════════════════════════════════════════════════════════
--- UI — MINI5 (Cursedsaken native — Cursed theme)
+-- UI — MINI5 (Cursedsaken native — RED theme forced)
 --═══════════════════════════════════════════════════════════════════
 print("[C00lsaken] Loading Cursedsaken UI (Mini5)...")
 
@@ -2013,19 +2025,60 @@ local okLoad, Mini5 = pcall(function()
 end)
 
 if not okLoad or type(Mini5) ~= "table" or not Mini5.CreateWindow then
-    warn("[C00lsaken] Mini5 failed to load!")
-    warn("Reason:", tostring(Mini5))
-    warn("Game logic active — use _G.C00lsaken.* to toggle features.")
+    warn("[C00lsaken] Mini5 failed to load! Reason:", tostring(Mini5))
+    warn("Game logic is still active — use _G.C00lsaken.* to toggle features.")
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "C00lsaken",
+            Text = "Mini5 UI failed. Use _G.C00lsaken API. Check console.",
+            Duration = 10,
+        })
+    end)
     return
 end
 
-local Window = Mini5.CreateWindow({
+-- Try red themes in order; first that works wins
+local WINDOW_BASE = {
     Name = "C00lsaken",
     Description = "by c00lkid & AI",
     Size = 620,
-    Version = "v3.2",
-    Theme = "Cursed",
-})
+    Version = "v3.3",
+}
+local RED_THEMES = { "Rose", "Blood", "Ruby", "Crimson", "Ember", "Red", "Magma", "Volcano", "Dark" }
+local Window
+local activeTheme = "default"
+
+for _, themeName in ipairs(RED_THEMES) do
+    local ok, result = pcall(function()
+        local cfg = {}
+        for k, v in pairs(WINDOW_BASE) do cfg[k] = v end
+        cfg.Theme = themeName
+        return Mini5.CreateWindow(cfg)
+    end)
+    if ok and result then
+        Window = result
+        activeTheme = themeName
+        print("[C00lsaken] Theme applied:", themeName)
+        break
+    end
+end
+
+if not Window then
+    print("[C00lsaken] All named themes failed — creating with no theme")
+    Window = Mini5.CreateWindow(WINDOW_BASE)
+end
+
+-- Force accent color to red if the library exposes a setter
+local RED_ACCENT = Color3.fromRGB(220, 30, 40)
+pcall(function()
+    if Mini5.SetAccent then Mini5.SetAccent(RED_ACCENT) end
+    if Mini5.SetAccentColor then Mini5.SetAccentColor(RED_ACCENT) end
+    if Window.SetAccent then Window:SetAccent(RED_ACCENT) end
+    if Window.SetAccentColor then Window:SetAccentColor(RED_ACCENT) end
+    if Window.AccentColor ~= nil then Window.AccentColor = RED_ACCENT end
+    if Window.Accent ~= nil then Window.Accent = RED_ACCENT end
+end)
+print("[C00lsaken] Active theme:", activeTheme)
 
 local I_TEXT = "Text"
 local I_RUN  = "Run"
@@ -2051,7 +2104,7 @@ local VisualCat = Window:AddCategory("Visual")
 -- Info
 local InfoTab = HomeCat:AddTab("Info", I_TEXT)
 InfoTab:AddSection("C00lsaken")
-InfoTab:AddParagraph("C00lsaken v3.2", "Merged build — Auto Block + Silent Aim + Hitbox Expander + per-character exploits")
+InfoTab:AddParagraph("C00lsaken v3.3", "Merged build — Auto Block + Silent Aim + Hitbox Expander + per-character exploits")
 InfoTab:AddParagraph("Toggle UI", "RightControl")
 
 -- Auto Block
@@ -2116,7 +2169,7 @@ MATab:AddSlider({ Name = "Prediction", Min = 0, Max = 2, Default = 0.1, Decimals
 MATab:AddSlider({ Name = "Smoothness", Min = 1, Max = 100, Default = 35, Callback = function(v) Settings.MA_Smoothness = v end })
 MATab:AddToggle({ Name = "Ping Comp", Default = true, Callback = function(v) Settings.MA_PingComp = v end })
 
--- HBE
+-- Hitbox Expander
 local HBETab = CombatCat:AddTab("Hitbox Exp", I_KILL)
 HBETab:AddSection("Hitbox Expander")
 HBETab:AddToggle({ Name = "Enable Hitbox Expander", Default = false, Callback = function(v) if v then HBE_Enable() else HBE_Disable() end end })
@@ -2343,7 +2396,7 @@ CFTab:AddButton({
 -- Credits
 local CRTab = HomeCat:AddTab("Credits", I_TEXT)
 CRTab:AddSection("Credits")
-CRTab:AddParagraph("C00lsaken v3.2", "Merged build — Auto Block + Silent Aim + Hitbox Expander + per-character exploits")
+CRTab:AddParagraph("C00lsaken v3.3", "Merged build — Auto Block + Silent Aim + Hitbox Expander + per-character exploits")
 CRTab:AddParagraph("Original credits", "c00lkid / random_dude / Viltrumite / Ivy")
 
 --═══════════════════════════════════════════════════════════════════
@@ -2351,5 +2404,5 @@ CRTab:AddParagraph("Original credits", "c00lkid / random_dude / Viltrumite / Ivy
 --═══════════════════════════════════════════════════════════════════
 task.spawn(Aim_SetupHook)
 Stam_EnsureMod()
-notify("C00lsaken v3.2", "Loaded — Cursed theme")
-print("[C00lsaken v3.2] Loaded. UI: Mini5 / Cursed. RightControl toggles.")
+notify("C00lsaken v3.3", "Loaded — Theme: " .. activeTheme)
+print("[C00lsaken v3.3] Loaded. Theme:", activeTheme, "| Buffer:", _hasBuffer, "| RightControl toggles.")
