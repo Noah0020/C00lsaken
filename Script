@@ -1,4 +1,116 @@
 --[[
+    Cr4zy HuB | Full merged build
+    Original C00lsaken feature logic and Mini5 tabs retained.
+    Cupcake prompt: Yes continues loading; No exits.
+]]
+
+-- Cupcake startup gate (runs before the original script initializes).
+local GatePlayers = game:GetService("Players")
+local GatePlayer = GatePlayers.LocalPlayer
+if not GatePlayer then error("Cr4zy HuB: LocalPlayer is unavailable.") end
+local GatePlayerGui = GatePlayer:WaitForChild("PlayerGui")
+
+local ExistingGate = GatePlayerGui:FindFirstChild("Cr4zyHuBCupcakeGate")
+if ExistingGate then ExistingGate:Destroy() end
+
+local GateGui = Instance.new("ScreenGui")
+GateGui.Name = "Cr4zyHuBCupcakeGate"
+GateGui.ResetOnSpawn = false
+GateGui.IgnoreGuiInset = true
+GateGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+local gateParented = pcall(function()
+    if type(gethui) == "function" then GateGui.Parent = gethui() end
+end)
+if not gateParented or not GateGui.Parent then GateGui.Parent = GatePlayerGui end
+
+local GateFrame = Instance.new("Frame")
+GateFrame.Name = "GateFrame"
+GateFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+GateFrame.Position = UDim2.fromScale(0.5, 0.5)
+GateFrame.Size = UDim2.new(0.88, 0, 0, 220)
+GateFrame.BackgroundColor3 = Color3.fromRGB(17, 17, 21)
+GateFrame.BorderSizePixel = 0
+GateFrame.Parent = GateGui
+local GateSize = Instance.new("UISizeConstraint")
+GateSize.MinSize = Vector2.new(280, 220)
+GateSize.MaxSize = Vector2.new(430, 220)
+GateSize.Parent = GateFrame
+local GateCorner = Instance.new("UICorner")
+GateCorner.CornerRadius = UDim.new(0, 14)
+GateCorner.Parent = GateFrame
+local GateStroke = Instance.new("UIStroke")
+GateStroke.Color = Color3.fromRGB(195, 35, 55)
+GateStroke.Thickness = 2
+GateStroke.Parent = GateFrame
+
+local GateTitle = Instance.new("TextLabel")
+GateTitle.BackgroundTransparency = 1
+GateTitle.Position = UDim2.new(0, 12, 0, 16)
+GateTitle.Size = UDim2.new(1, -24, 0, 32)
+GateTitle.Font = Enum.Font.GothamBold
+GateTitle.Text = "Cr4zy HuB"
+GateTitle.TextColor3 = Color3.fromRGB(245, 65, 80)
+GateTitle.TextSize = 23
+GateTitle.Parent = GateFrame
+
+local GateQuestion = Instance.new("TextLabel")
+GateQuestion.BackgroundTransparency = 1
+GateQuestion.Position = UDim2.new(0, 14, 0, 62)
+GateQuestion.Size = UDim2.new(1, -28, 0, 52)
+GateQuestion.Font = Enum.Font.GothamMedium
+GateQuestion.Text = "Do you want a cupcake totally normal :)"
+GateQuestion.TextColor3 = Color3.fromRGB(245, 245, 248)
+GateQuestion.TextSize = 16
+GateQuestion.TextWrapped = true
+GateQuestion.Parent = GateFrame
+
+local GateButtons = Instance.new("Frame")
+GateButtons.BackgroundTransparency = 1
+GateButtons.Position = UDim2.new(0, 14, 1, -64)
+GateButtons.Size = UDim2.new(1, -28, 0, 44)
+GateButtons.Parent = GateFrame
+local GateLayout = Instance.new("UIListLayout")
+GateLayout.FillDirection = Enum.FillDirection.Horizontal
+GateLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+GateLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+GateLayout.Padding = UDim.new(0, 12)
+GateLayout.Parent = GateButtons
+
+local function makeGateButton(name, label, color)
+    local button = Instance.new("TextButton")
+    button.Name = name
+    button.Size = UDim2.new(0.5, -6, 1, 0)
+    button.BackgroundColor3 = color
+    button.BorderSizePixel = 0
+    button.AutoButtonColor = true
+    button.Font = Enum.Font.GothamBold
+    button.Text = label
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 16
+    button.Parent = GateButtons
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 9)
+    corner.Parent = button
+    return button
+end
+
+local YesButton = makeGateButton("YesButton", "Yes!", Color3.fromRGB(185, 35, 55))
+local NoButton = makeGateButton("NoButton", "No", Color3.fromRGB(55, 55, 65))
+local gateChoice
+YesButton.Activated:Connect(function()
+    if gateChoice then return end
+    gateChoice = "Yes"
+    GateGui:Destroy()
+end)
+NoButton.Activated:Connect(function()
+    if gateChoice then return end
+    gateChoice = "No"
+    GateGui:Destroy()
+end)
+repeat task.wait() until gateChoice ~= nil
+if gateChoice == "No" then return end
+
+--[[
     C00LSAKEN v3.0 — Merged build
     Core:      v2.2 (Auto Block / HDT / Punch Aim / Survivor Aim / ESP / Stamina / Killer M1 / Gen)
     Added:     Silent Aim, Manual Aimbot, Hitbox Expander, Anti-Debuffs, Anti-Bait utilities
@@ -2221,7 +2333,7 @@ local Mini5Loader = assert(loadstring(Mini5Source), "C00lsaken: Mini5 library co
 local Mini5 = Mini5Loader()
 assert(type(Mini5) == "table" and type(Mini5.CreateWindow) == "function", "C00lsaken: Mini5 API unavailable")
 local Window = Mini5.CreateWindow({
-    Name = "C00lsaken",
+    Name = "Cr4zy HuB",
     Description = "by c00lkid & AI",
     Size = 620,
     Version = "v3.0",
@@ -2233,9 +2345,9 @@ local Window = Mini5.CreateWindow({
 --═══════════════════════════════════════════════════════════════════
 local HomeCat = Window:AddCategory("Home")
 local InfoTab = HomeCat:AddTab("Info", "info")
-InfoTab:AddSection("C00lsaken")
+InfoTab:AddSection("Cr4zy HuB")
 InfoTab:AddSection("Merged build | v3.0")
-InfoTab:AddSection("C00lsaken core + Silent Aim + Hitbox Expander + character features")
+InfoTab:AddSection("Full merged build | Original features preserved")
 InfoTab:AddSection("Mini5 Cursed theme | Toggle: RightControl")
 
 --═══════════════════════════════════════════════════════════════════
@@ -2537,7 +2649,7 @@ ConfigTab:AddButton({ Name = "Disable All", Callback = function()
     pcall(SilentAim_Disable); pcall(MAimbot_Disable); pcall(HBE_Disable)
     pcall(Shed_Disable); pcall(TT_Stop); pcall(Elliot_Stop)
     Settings.AIM_Enabled = false
-    Window:Notification({ Name = "C00lsaken", Description = "All features disabled", Duration = 3 })
+    Window:Notification({ Name = "Cr4zy HuB", Description = "All features disabled", Duration = 3 })
 end })
 
 --═══════════════════════════════════════════════════════════════════
@@ -2546,5 +2658,5 @@ end })
 task.spawn(Aim_SetupHook)
 Stam_EnsureMod()
 
-Window:Notification({ Name = "C00lsaken v3.0", Description = "Merged build loaded — Cursed theme", Duration = 4 })
-print("[C00lsaken v3.0] Loaded. RightControl to toggle UI.")
+Window:Notification({ Name = "Cr4zy HuB", Description = "Full merged build loaded", Duration = 4 })
+print("[Cr4zy HuB] Loaded. RightControl to toggle UI.")
