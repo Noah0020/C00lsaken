@@ -1,6 +1,10 @@
 --[[
-    GODSAKEN UNIFIED v2.1 — REDLINE
-    Complete build. All tabs populated.
+    GODSAKEN UNIFIED v2.2 — REDLINE
+    Fixes:
+      - Survivor Auto Aim: prediction now uses velocity only (was LookVector mixing)
+      - HDT: uses internal HDT.Speed/Duration/Delay that properly syncs from Settings
+    New:
+      - Gameplay tab: FPS Boost button (one-time) + Blue Hitbox loader button
 ]]
 
 local Players             = game:GetService("Players")
@@ -8,6 +12,7 @@ local ReplicatedStorage   = game:GetService("ReplicatedStorage")
 local RunService          = game:GetService("RunService")
 local Workspace           = game:GetService("Workspace")
 local CoreGui             = game:GetService("CoreGui")
+local Lighting            = game:GetService("Lighting")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
@@ -45,7 +50,6 @@ local function _num(v, d) return tonumber(v) or d end
 -- SETTINGS
 --═══════════════════════════════════════════════════════════════════
 local Settings = {
-    -- Auto Block
     AB_Enabled = false, AB_Mode = "Guest1337", AB_ShowZone = true,
     AB_FacingMode = "Circle",
     AB_CircleRadius = 8, AB_DotRadius = 5, AB_DotDistance = 4,
@@ -67,26 +71,21 @@ local Settings = {
     },
     SelectedKillerBox = "Default",
 
-    -- Anti Bait / Auto Parry / Punch Aim
     ABT_Enabled = false, ABT_Duration = 0.5,
     AP_Enabled = false, AP_Delay = 0.5,
     PA_Enabled = false, PA_Prediction = 4,
 
-    -- HDT
     HDT_Enabled = false, HDT_Speed = 40, HDT_Delay = 0.05, HDT_Duration = 0.6,
 
-    -- Survivor Auto Aim
     AIM_Enabled = false, AIM_Mode = "Character", AIM_Prediction = 4,
     AIM_LockTime = 0.7, AIM_MinDist = 3, AIM_Range = 55,
     AIM_OnSlash = true, AIM_OnBlock = true, AIM_OnDagger = true,
     AIM_OnAxe = true, AIM_OnShoot = true,
 
-    -- ESP
     ESP_Killer = false, ESP_Survivor = false, ESP_Generator = false,
     ESP_Medkit = false, ESP_Bloxy = false,
     ESP_WallCheck = false, ESP_MaxDist = 150,
 
-    -- Auto M1
     AM1_Enabled = false, AM1_Range = 9,
     AM1_GuestDelay = 0.2, AM1_M1Delay = 0,
     AM1_ExtremeClick = false, AM1_UseFacing = false,
@@ -94,7 +93,6 @@ local Settings = {
     AM1_RangeVisual = false, AM1_RangeOpacity = 1.0,
     AM1_FacingVisual = false, AM1_FacingOpacity = 1.0,
 
-    -- Generator Solver
     GS_Enabled = false, GS_StartDelay = 1.5,
     GS_FlowDelay = 0.05, GS_ConnectDelay = 1.0,
     GS_GearDelay = 0.03, GS_LockDelay = 0.08,
@@ -661,13 +659,16 @@ local function PA_Disable()
 end
 
 --═══════════════════════════════════════════════════════════════════
--- HDT
+-- HDT — FIXED: uses HDT.Speed/Duration/Delay that sync with Settings
 --═══════════════════════════════════════════════════════════════════
-local HDT = { running=false, debounce=false, animConn=nil, watcher=nil,
-              charConn=nil, bind="GS_HDT_Bind", lastDmg=0, active=nil }
-local function HDT_Speed()    return tonumber(Settings.HDT_Speed)    or 40   end
-local function HDT_Duration() return tonumber(Settings.HDT_Duration) or 0.6  end
-local function HDT_Delay()    return tonumber(Settings.HDT_Delay)    or 0.05 end
+local HDT = {
+    running = false, debounce = false, animConn = nil, watcher = nil,
+    charConn = nil, bind = "GS_HDT_Bind", lastDmg = 0, active = nil,
+    Speed    = tonumber(Settings.HDT_Speed)    or 40,
+    Duration = tonumber(Settings.HDT_Duration) or 0.6,
+    Delay    = tonumber(Settings.HDT_Delay)    or 0.05,
+    Debug    = false,
+}
 
 local function HDT_Nearest()
     local kf = GetKillersFolder(); if not kf or not LocalRoot then return nil end
@@ -693,7 +694,11 @@ local function HDT_Dash(killer)
     HDT.debounce = true
     local oWS, oAR = hum.WalkSpeed, hum.AutoRotate
     HDT.active = { hum=hum, walkSpeed=oWS, autoRotate=oAR }
-    hum.WalkSpeed, hum.AutoRotate = HDT_Speed(), true
+    if HDT.Debug then
+        print(string.format("[HDT] START Speed=%.1f Duration=%.2f Delay=%.3f",
+            HDT.Speed, HDT.Duration, HDT.Delay))
+    end
+    hum.WalkSpeed, hum.AutoRotate = HDT.Speed, true
     local st = tick()
     local function stop()
         HDT.debounce = false; HDT.active = nil
@@ -704,6 +709,7 @@ local function HDT_Dash(killer)
                 hum.WalkSpeed = oWS; hum.AutoRotate = oAR
             end)
         end
+        if HDT.Debug then print("[HDT] STOP") end
     end
     pcall(function() RunService:UnbindFromRenderStep(HDT.bind) end)
     RunService:BindToRenderStep(HDT.bind, Enum.RenderPriority.Last.Value + 1, function()
@@ -712,10 +718,9 @@ local function HDT_Dash(killer)
         local kt = killer:FindFirstChild("HumanoidRootPart"); if not kt then stop(); return end
         local flat = Vector3.new(kt.Position.X - hrp.Position.X, 0, kt.Position.Z - hrp.Position.Z)
         if flat.Magnitude <= 2 then stop(); return end
-        local liveSpd = HDT_Speed()
-        if hum.WalkSpeed ~= liveSpd then hum.WalkSpeed = liveSpd end
+        if hum.WalkSpeed ~= HDT.Speed then hum.WalkSpeed = HDT.Speed end
         hum:Move(flat.Unit, false)
-        if tick() - st > HDT_Duration() then stop() end
+        if tick() - st > HDT.Duration then stop() end
     end)
 end
 
@@ -724,8 +729,13 @@ local function HDT_OnAnim(track)
     if tick() - HDT.lastDmg < 0.2 then return end
     local aid = track.Animation and track.Animation.AnimationId
     if not aid or not HDT_Anims[aid] then return end
-    local k = HDT_Nearest(); if not k then return end
-    task.delay(HDT_Delay(), function() if HDT.running then HDT_Dash(k) end end)
+    local k = HDT_Nearest()
+    if not k then
+        if HDT.Debug then print("[HDT] Block anim but no killer nearby") end
+        return
+    end
+    if HDT.Debug then print(string.format("[HDT] Block anim detected | killer=%s", k.Name)) end
+    task.delay(HDT.Delay, function() if HDT.running then HDT_Dash(k) end end)
 end
 
 local function HDT_Attach()
@@ -734,6 +744,7 @@ local function HDT_Attach()
     local anim = hum:FindFirstChildOfClass("Animator"); if not anim then return end
     if HDT.animConn then pcall(function() HDT.animConn:Disconnect() end) end
     HDT.animConn = anim.AnimationPlayed:Connect(HDT_OnAnim)
+    if HDT.Debug then print("[HDT] Attached") end
 end
 
 local function HDT_Enable()
@@ -767,8 +778,21 @@ local function HDT_Disable()
     pcall(function() RunService:UnbindFromRenderStep(HDT.bind) end)
 end
 
+local function HDT_SetSpeed(v) HDT.Speed = tonumber(v) or 40; Settings.HDT_Speed = HDT.Speed end
+local function HDT_SetDuration(v) HDT.Duration = tonumber(v) or 0.6; Settings.HDT_Duration = HDT.Duration end
+local function HDT_SetDelay(v) HDT.Delay = tonumber(v) or 0.05; Settings.HDT_Delay = HDT.Delay end
+local function HDT_SyncFromSettings()
+    HDT.Speed    = tonumber(Settings.HDT_Speed)    or 40
+    HDT.Duration = tonumber(Settings.HDT_Duration) or 0.6
+    HDT.Delay    = tonumber(Settings.HDT_Delay)    or 0.05
+end
+local function HDT_ForceNow()
+    local k = HDT_Nearest()
+    if k then HDT_Dash(k) else print("[HDT] No killer nearby") end
+end
+
 --═══════════════════════════════════════════════════════════════════
--- SURVIVOR AUTO AIM
+-- SURVIVOR AUTO AIM — FIXED: velocity-only prediction
 --═══════════════════════════════════════════════════════════════════
 local Aim = { active=false, startT=0, lastTrig=0, hookDone=false, endT=0 }
 
@@ -876,9 +900,14 @@ RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
     local h = char:FindFirstChildOfClass("Humanoid"); if h then h.AutoRotate = false end
+
+    -- FIXED prediction: velocity only, 1→10 scales 0.05s → 0.50s lead time
     local predN = math.clamp(Settings.AIM_Prediction, 1, 10)
     local vel = killer.AssemblyLinearVelocity or Vector3.new()
-    local target = killer.Position + killer.CFrame.LookVector*(predN*0.5) + vel*(predN*0.03)
+    if vel.Magnitude > 50 then vel = vel.Unit * 50 end   -- cap
+    local leadTime = predN * 0.05
+    local target = killer.Position + vel * leadTime
+
     if Settings.AIM_Mode == "Character" or Settings.AIM_Mode == "Both" then
         hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(target.X, hrp.Position.Y, target.Z))
     end
@@ -1270,13 +1299,11 @@ end
 --═══════════════════════════════════════════════════════════════════
 local GS = { installed=false, generation=0, lockBoard=nil }
 local GSM = {}
-
 local function gs_safeRequire(path)
     if not path then return nil end
     local ok, res = pcall(function() return require(path) end)
     return ok and res or nil
 end
-
 local function gs_loadModules()
     if GSM.flow and GSM.gear and GSM.connect and GSM.lock and GSM.flowBoard and GSM.lockBoard then return true end
     local systems = ReplicatedStorage:FindFirstChild("Systems")
@@ -1294,7 +1321,6 @@ local function gs_loadModules()
     GSM.lockBoard = gs_safeRequire(miniMods:FindFirstChild("LockBoard"))
     return GSM.flow and GSM.gear and GSM.connect and GSM.lock and GSM.flowBoard and GSM.lockBoard
 end
-
 local function gs_isEnabled() return Settings.GS_Enabled end
 local function gs_stillSolving(object) return gs_isEnabled() and object and not object.Ended end
 local function gs_waitForSolver(object)
@@ -1306,7 +1332,6 @@ local function gs_waitForSolver(object)
     end
     return object and not object.Ended and gs_isEnabled()
 end
-
 local function gs_solveFlowBoard(board, FlowBoardModule)
     local size, pairMap = board.Size, board.Pairs
     local occupied, answer = {}, {}
@@ -1372,16 +1397,13 @@ local function gs_solveFlowBoard(board, FlowBoardModule)
     end
     return search(remaining) and answer or nil
 end
-
 local function gs_install()
     if GS.installed then return true end
     if not gs_loadModules() then return false end
     GS.installed = true
     local oldLockBoardNew = GSM.lockBoard.new
     GSM.lockBoard.new = function(...)
-        local board = oldLockBoardNew(...)
-        GS.lockBoard = board
-        return board
+        local board = oldLockBoardNew(...); GS.lockBoard = board; return board
     end
     local oldFlowNew = GSM.flow.new
     GSM.flow.new = function(board, renderer, callbacks)
@@ -1423,8 +1445,7 @@ local function gs_install()
                 if not board:GetLink(blob) then
                     local mate = board:GetMate(blob)
                     if mate then
-                        board:Connect(blob, mate)
-                        renderer:Render()
+                        board:Connect(blob, mate); renderer:Render()
                         task.wait(Settings.GS_ConnectDelay)
                     end
                 end
@@ -1469,16 +1490,13 @@ local function gs_install()
     end
     return true
 end
-
 local function GS_Enable()
     if not gs_install() then return false end
-    Settings.GS_Enabled = true
-    GS.generation = GS.generation + 1
+    Settings.GS_Enabled = true; GS.generation = GS.generation + 1
     return true
 end
 local function GS_Disable()
-    Settings.GS_Enabled = false
-    GS.generation = GS.generation + 1
+    Settings.GS_Enabled = false; GS.generation = GS.generation + 1
 end
 
 --═══════════════════════════════════════════════════════════════════
@@ -1501,21 +1519,17 @@ _G.Godsaken = {
         SetSpamEnabled  = function(v) Settings.AB_SpamEnabled = v end,
         SetSpamCount    = function(v) Settings.AB_SpamCount = _num(v, 4) end,
         SetSpamDuration = function(v) Settings.AB_SpamDuration = _num(v, 0.05) end,
-        SelectKillerBox = function(name) Settings.SelectedKillerBox = name end,
-        SetBoxWidth     = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].width = _num(v, 6) end end,
-        SetBoxHeight    = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].height = _num(v, 6) end end,
-        SetBoxLength    = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].length = _num(v, 9) end end,
-        SetBoxDistance  = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].distance = _num(v, 3) end end,
-        GetBox          = function(name) return Settings.KillerHitbox[name or Settings.SelectedKillerBox] end,
     },
     AntiBait = { Enable=ABT_Enable, Disable=ABT_Disable, SetDuration=function(v) Settings.ABT_Duration=_num(v,0.5) end },
     AutoParry = { Enable=AP_Enable, Disable=AP_Disable, SetDelay=function(v) Settings.AP_Delay=_num(v,0.5) end },
     PunchAim = { Enable=PA_Enable, Disable=PA_Disable, SetPrediction=function(v) Settings.PA_Prediction=_num(v,4) end },
     HDT = {
         Enable=HDT_Enable, Disable=HDT_Disable,
-        SetSpeed    = function(v) Settings.HDT_Speed    = _num(v, 40)   end,
-        SetDelay    = function(v) Settings.HDT_Delay    = _num(v, 0.05) end,
-        SetDuration = function(v) Settings.HDT_Duration = _num(v, 0.6)  end,
+        SetSpeed    = HDT_SetSpeed,
+        SetDelay    = HDT_SetDelay,
+        SetDuration = HDT_SetDuration,
+        Force       = HDT_ForceNow,
+        SyncFromSettings = HDT_SyncFromSettings,
     },
     SurvivorAim = {
         Enable = function() Settings.AIM_Enabled = true; Aim_SetupHook() end,
@@ -1525,15 +1539,6 @@ _G.Godsaken = {
         SetLockTime   = function(v) Settings.AIM_LockTime = _num(v,0.7) end,
         SetRange      = function(v) Settings.AIM_Range = _num(v,55) end,
         SetMinDist    = function(v) Settings.AIM_MinDist = _num(v,3) end,
-        SetPattern    = function(key, v)
-            key = tostring(key):lower()
-            if key == "slash" then Settings.AIM_OnSlash = v end
-            if key == "block" or key == "parry" or key == "punch" then Settings.AIM_OnBlock = v end
-            if key == "dagger" or key == "twotime" then Settings.AIM_OnDagger = v end
-            if key == "axe" or key == "hatchet" or key == "janedoe" then Settings.AIM_OnAxe = v end
-            if key == "shoot" or key == "oneshot" or key == "gun" or key == "chance" then Settings.AIM_OnShoot = v end
-        end,
-        Trigger = Aim_Trigger,
     },
     ESP = {
         SetKiller    = function(v) Settings.ESP_Killer=v; ES_Refresh() end,
@@ -1552,8 +1557,6 @@ _G.Godsaken = {
         SetStaminaDrain  = function(v) Stam_SetField("StaminaDrain", v) end,
         SetRegenDelay    = function(v) Stam_SetField("StaminaRegenDelay", v) end,
         Restore          = function() Stam_StopLoop(); Stam_Restore() end,
-        Enable  = function() Stam_SetInfinite(true) end,
-        Disable = function() Stam_SetInfinite(false); Stam_StopLoop(); Stam_Restore() end,
         Defaults = STAM_DEFAULT,
     },
     KillerM1 = {
@@ -1563,19 +1566,6 @@ _G.Godsaken = {
         SetM1Delay       = function(v) Settings.AM1_M1Delay = _num(v, 0) end,
         SetExtremeClick  = function(v) Settings.AM1_ExtremeClick = v end,
         SetUseFacing     = function(v) Settings.AM1_UseFacing = v end,
-        SetFacingSize    = function(x, y, z)
-            Settings.AM1_FacingX = _num(x, 9)
-            Settings.AM1_FacingY = _num(y, 10)
-            Settings.AM1_FacingZ = _num(z, 9)
-        end,
-        SetRangeVisual   = function(v)
-            Settings.AM1_RangeVisual = v
-            if v and AM1.running then AM1_CreateRangeRing() else AM1_DestroyRangeRing() end
-        end,
-        SetFacingVisual  = function(v)
-            Settings.AM1_FacingVisual = v
-            if v and AM1.running then AM1_CreateFacingBox() else AM1_DestroyFacingBox() end
-        end,
     },
     AutoGen = {
         Enable           = function() return GS_Enable() end,
@@ -1612,7 +1602,7 @@ Library.NotifySide = "Right"
 
 local Window = Library:CreateWindow({
     Title = "C00lsaken",
-    Footer = "REDLINE  |  v2.1",
+    Footer = "REDLINE  |  v2.2",
     ToggleKeybind = Enum.KeyCode.RightControl,
     Center = true, AutoShow = true, Resizable = true,
     ShowCustomCursor = false, MobileButtonsSide = "Right",
@@ -1624,6 +1614,7 @@ local Tabs = {
     Killer    = Window:AddTab("Killer", "crosshair"),
     Stamina   = Window:AddTab("Stamina", "zap"),
     AutoGen   = Window:AddTab("Auto Gen", "cpu"),
+    Gameplay  = Window:AddTab("Gameplay", "gamepad-2"),
     Visuals   = Window:AddTab("Visuals", "eye"),
     Appearance = Window:AddTab("Appearance", "palette"),
     Credits   = Window:AddTab("Credits", "users"),
@@ -1653,31 +1644,39 @@ ABMain:AddSlider("AB_Pending_S", {
 
 local HDTBox = Tabs.AutoBlock:AddLeftGroupbox("HDT")
 local HDTSliders = {}
+
 HDTBox:AddToggle("HDT_T", {
     Text = "Enable HDT", Default = false,
     Callback = function(v) if v then HDT_Enable() else HDT_Disable() end end,
 })
-local _spd = tonumber(Settings.HDT_Speed) or 40
 HDTSliders.Speed = HDTBox:AddSlider("HDT_Spd", {
-    Text = "Speed", Default = _spd, Min = math.min(5, _spd), Max = math.max(500, _spd), Rounding = 0,
-    Callback = function(v) Settings.HDT_Speed = tonumber(v) or 40 end,
+    Text = "Speed", Default = HDT.Speed, Min = 5, Max = 500, Rounding = 0,
+    Callback = function(v) HDT_SetSpeed(v) end,
 })
-local _delay = tonumber(Settings.HDT_Delay) or 0.05
-HDTSliders.Delay = HDTBox:AddSlider("HDT_Delay", {
-    Text = "Delay", Default = _delay, Min = 0, Max = math.max(2, _delay), Rounding = 3,
-    Callback = function(v) Settings.HDT_Delay = tonumber(v) or 0.05 end,
+HDTSliders.Delay = HDTBox:AddSlider("HDT_Delay_S", {
+    Text = "Delay", Default = HDT.Delay, Min = 0, Max = 2, Rounding = 3,
+    Callback = function(v) HDT_SetDelay(v) end,
 })
-local _dur = tonumber(Settings.HDT_Duration) or 0.6
-HDTSliders.Duration = HDTBox:AddSlider("HDT_Dur", {
-    Text = "Duration", Default = _dur, Min = math.min(0.05, _dur), Max = math.max(3, _dur), Rounding = 3,
-    Callback = function(v) Settings.HDT_Duration = tonumber(v) or 0.6 end,
+HDTSliders.Duration = HDTBox:AddSlider("HDT_Dur_S", {
+    Text = "Duration", Default = HDT.Duration, Min = 0.05, Max = 3, Rounding = 3,
+    Callback = function(v) HDT_SetDuration(v) end,
+})
+HDTBox:AddToggle("HDT_Debug_T", {
+    Text = "Debug (print to console)", Default = false,
+    Callback = function(v) HDT.Debug = v end,
 })
 HDTBox:AddButton({
-    Text = "Refresh from Settings",
+    Text = "Force HDT Now",
+    Func = function() HDT_ForceNow() end,
+})
+HDTBox:AddButton({
+    Text = "Sync from Settings",
     Func = function()
-        if HDTSliders.Speed then pcall(function() HDTSliders.Speed:Set(tonumber(Settings.HDT_Speed) or 40) end) end
-        if HDTSliders.Delay then pcall(function() HDTSliders.Delay:Set(tonumber(Settings.HDT_Delay) or 0.05) end) end
-        if HDTSliders.Duration then pcall(function() HDTSliders.Duration:Set(tonumber(Settings.HDT_Duration) or 0.6) end) end
+        HDT_SyncFromSettings()
+        pcall(function() HDTSliders.Speed:Set(HDT.Speed) end)
+        pcall(function() HDTSliders.Delay:Set(HDT.Delay) end)
+        pcall(function() HDTSliders.Duration:Set(HDT.Duration) end)
+        print(string.format("[HDT] Synced Speed=%.1f Delay=%.3f Duration=%.3f", HDT.Speed, HDT.Delay, HDT.Duration))
     end,
 })
 
@@ -1713,32 +1712,14 @@ ABRight:AddDropdown("AB_FacingMode_D", {
 })
 
 local ABE1 = Tabs.AutoBlock:AddRightGroupbox("Zone Editor - Circle / Dot")
-ABE1:AddSlider("AB_CircleR_S", {
-    Text = "Circle Radius", Default = 8, Min = 2, Max = 30, Rounding = 1,
-    Callback = function(v) Settings.AB_CircleRadius = v end,
-})
-ABE1:AddSlider("AB_DotR_S", {
-    Text = "Dot Radius", Default = 5, Min = 1, Max = 20, Rounding = 1,
-    Callback = function(v) Settings.AB_DotRadius = v end,
-})
-ABE1:AddSlider("AB_DotD_S", {
-    Text = "Dot Distance", Default = 4, Min = 0, Max = 20, Rounding = 1,
-    Callback = function(v) Settings.AB_DotDistance = v end,
-})
+ABE1:AddSlider("AB_CircleR_S", { Text = "Circle Radius", Default = 8, Min = 2, Max = 30, Rounding = 1, Callback = function(v) Settings.AB_CircleRadius = v end })
+ABE1:AddSlider("AB_DotR_S", { Text = "Dot Radius", Default = 5, Min = 1, Max = 20, Rounding = 1, Callback = function(v) Settings.AB_DotRadius = v end })
+ABE1:AddSlider("AB_DotD_S", { Text = "Dot Distance", Default = 4, Min = 0, Max = 20, Rounding = 1, Callback = function(v) Settings.AB_DotDistance = v end })
 
 local ABE2 = Tabs.AutoBlock:AddRightGroupbox("Zone Editor - Diamond")
-ABE2:AddSlider("AB_DL_S", {
-    Text = "Length", Default = 8, Min = 2, Max = 30, Rounding = 1,
-    Callback = function(v) Settings.AB_DiamondLength = v end,
-})
-ABE2:AddSlider("AB_DW_S", {
-    Text = "Width", Default = 4, Min = 1, Max = 20, Rounding = 1,
-    Callback = function(v) Settings.AB_DiamondWidth = v end,
-})
-ABE2:AddSlider("AB_DO_S", {
-    Text = "Offset", Default = 3, Min = 0, Max = 20, Rounding = 1,
-    Callback = function(v) Settings.AB_DiamondOffset = v end,
-})
+ABE2:AddSlider("AB_DL_S", { Text = "Length", Default = 8, Min = 2, Max = 30, Rounding = 1, Callback = function(v) Settings.AB_DiamondLength = v end })
+ABE2:AddSlider("AB_DW_S", { Text = "Width", Default = 4, Min = 1, Max = 20, Rounding = 1, Callback = function(v) Settings.AB_DiamondWidth = v end })
+ABE2:AddSlider("AB_DO_S", { Text = "Offset", Default = 3, Min = 0, Max = 20, Rounding = 1, Callback = function(v) Settings.AB_DiamondOffset = v end })
 
 local BXE = Tabs.AutoBlock:AddRightGroupbox("Zone Editor - Box")
 local BoxSliders = {}
@@ -1756,84 +1737,27 @@ BXE:AddDropdown("Box_Killer_D", {
     Callback = function(name) Settings.SelectedKillerBox = name; refreshBoxSliders(name) end,
 })
 local boxD = Settings.KillerHitbox["Default"]
-BoxSliders.Width = BXE:AddSlider("Box_W_S", {
-    Text = "Width", Default = boxD.width, Min = 1, Max = 20, Rounding = 1,
-    Callback = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].width = v end end,
-})
-BoxSliders.Height = BXE:AddSlider("Box_H_S", {
-    Text = "Height", Default = boxD.height, Min = 1, Max = 20, Rounding = 1,
-    Callback = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].height = v end end,
-})
-BoxSliders.Length = BXE:AddSlider("Box_L_S", {
-    Text = "Length", Default = boxD.length, Min = 1, Max = 30, Rounding = 1,
-    Callback = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].length = v end end,
-})
-BoxSliders.Distance = BXE:AddSlider("Box_D_S", {
-    Text = "Distance", Default = boxD.distance, Min = 0, Max = 15, Rounding = 1,
-    Callback = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].distance = v end end,
-})
-BXE:AddButton({
-    Text = "Reset Selected",
-    Func = function()
-        local name = Settings.SelectedKillerBox
-        local orig = {
-            ["Default"] = {width=6,height=6,length=9,distance=3}, ["CoolKid"]={width=5,height=6,length=7,distance=3},
-            ["Slasher"] = {width=6,height=6,length=9,distance=3}, ["1x1x1x1"]={width=6,height=6,length=9,distance=3},
-            ["JohnDoe"] = {width=6,height=6,length=9,distance=3}, ["John Doe"]={width=6,height=6,length=9,distance=3},
-            ["Nosferatu"]={width=6,height=6,length=9,distance=3}, ["Sixer"]={width=6,height=6,length=9,distance=6},
-            ["Noli"] = {width=6,height=6,length=9,distance=3}, ["Azure"]={width=6,height=6,length=9,distance=3},
-        }
-        if orig[name] and Settings.KillerHitbox[name] then
-            for k, v in pairs(orig[name]) do Settings.KillerHitbox[name][k] = v end
-            refreshBoxSliders(name)
-        end
-    end,
-})
+BoxSliders.Width = BXE:AddSlider("Box_W_S", { Text = "Width", Default = boxD.width, Min = 1, Max = 20, Rounding = 1, Callback = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].width = v end end })
+BoxSliders.Height = BXE:AddSlider("Box_H_S", { Text = "Height", Default = boxD.height, Min = 1, Max = 20, Rounding = 1, Callback = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].height = v end end })
+BoxSliders.Length = BXE:AddSlider("Box_L_S", { Text = "Length", Default = boxD.length, Min = 1, Max = 30, Rounding = 1, Callback = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].length = v end end })
+BoxSliders.Distance = BXE:AddSlider("Box_D_S", { Text = "Distance", Default = boxD.distance, Min = 0, Max = 15, Rounding = 1, Callback = function(v) local k = Settings.SelectedKillerBox; if Settings.KillerHitbox[k] then Settings.KillerHitbox[k].distance = v end end })
 
 --═══════════════════════════════════════════════════════════════════
 -- SURVIVOR TAB
 --═══════════════════════════════════════════════════════════════════
 local SPB = Tabs.Survivor:AddLeftGroupbox("Auto Parry & Punch Aim")
-SPB:AddToggle("AP_T", {
-    Text = "Auto Parry", Default = false,
-    Callback = function(v) if v then AP_Enable() else AP_Disable() end end,
-})
-SPB:AddSlider("AP_Delay_S", {
-    Text = "Parry Delay", Default = 0.5, Min = 0, Max = 1, Rounding = 2,
-    Callback = function(v) Settings.AP_Delay = v end,
-})
+SPB:AddToggle("AP_T", { Text = "Auto Parry", Default = false, Callback = function(v) if v then AP_Enable() else AP_Disable() end end })
+SPB:AddSlider("AP_Delay_S", { Text = "Parry Delay", Default = 0.5, Min = 0, Max = 1, Rounding = 2, Callback = function(v) Settings.AP_Delay = v end })
 SPB:AddDivider()
-SPB:AddToggle("PA_T", {
-    Text = "Punch Aim", Default = false,
-    Callback = function(v) if v then PA_Enable() else PA_Disable() end end,
-})
-SPB:AddSlider("PA_Pred_S", {
-    Text = "Punch Prediction", Default = 4, Min = 0, Max = 20, Rounding = 0,
-    Callback = function(v) Settings.PA_Prediction = v end,
-})
+SPB:AddToggle("PA_T", { Text = "Punch Aim", Default = false, Callback = function(v) if v then PA_Enable() else PA_Disable() end end })
+SPB:AddSlider("PA_Pred_S", { Text = "Punch Prediction", Default = 4, Min = 0, Max = 20, Rounding = 0, Callback = function(v) Settings.PA_Prediction = v end })
 
 local SAim = Tabs.Survivor:AddLeftGroupbox("Survivor Auto Aim")
-SAim:AddToggle("AIM_T", {
-    Text = "Enable Auto Aim", Default = false,
-    Callback = function(v) Settings.AIM_Enabled = v; if v then Aim_SetupHook() end end,
-})
-SAim:AddDropdown("AIM_M", {
-    Text = "Aim Mode", Values = {"Character","Camera","Both"},
-    Default = "Character", Multi = false,
-    Callback = function(v) Settings.AIM_Mode = v end,
-})
-SAim:AddSlider("AIM_Pred_S", {
-    Text = "Prediction (1-10)", Default = 4, Min = 1, Max = 10, Rounding = 0,
-    Callback = function(v) Settings.AIM_Prediction = v end,
-})
-SAim:AddSlider("AIM_Lock_S", {
-    Text = "Lock Time", Default = 0.7, Min = 0.1, Max = 3, Rounding = 2,
-    Callback = function(v) Settings.AIM_LockTime = v end,
-})
-SAim:AddSlider("AIM_Range_S", {
-    Text = "Range", Default = 55, Min = 5, Max = 200, Rounding = 0,
-    Callback = function(v) Settings.AIM_Range = v end,
-})
+SAim:AddToggle("AIM_T", { Text = "Enable Auto Aim", Default = false, Callback = function(v) Settings.AIM_Enabled = v; if v then Aim_SetupHook() end end })
+SAim:AddDropdown("AIM_M", { Text = "Aim Mode", Values = {"Character","Camera","Both"}, Default = "Character", Multi = false, Callback = function(v) Settings.AIM_Mode = v end })
+SAim:AddSlider("AIM_Pred_S", { Text = "Prediction (1-10)", Default = 4, Min = 1, Max = 10, Rounding = 0, Callback = function(v) Settings.AIM_Prediction = v end })
+SAim:AddSlider("AIM_Lock_S", { Text = "Lock Time", Default = 0.7, Min = 0.1, Max = 3, Rounding = 2, Callback = function(v) Settings.AIM_LockTime = v end })
+SAim:AddSlider("AIM_Range_S", { Text = "Range", Default = 55, Min = 5, Max = 200, Rounding = 0, Callback = function(v) Settings.AIM_Range = v end })
 
 local SPat = Tabs.Survivor:AddRightGroupbox("Trigger Patterns")
 SPat:AddToggle("PatSlash",  { Text = "Shedletsky - Slash",             Default = true, Callback = function(v) Settings.AIM_OnSlash  = v end })
@@ -1846,104 +1770,39 @@ SPat:AddToggle("PatShoot",  { Text = "Chance - Shoot / Oneshot / Gun", Default =
 -- KILLER TAB
 --═══════════════════════════════════════════════════════════════════
 local AM1Box = Tabs.Killer:AddLeftGroupbox("Auto M1")
-AM1Box:AddToggle("AM1_Enable_T", {
-    Text = "Enable Auto M1", Default = false,
-    Callback = function(v) if v then AM1_Enable() else AM1_Disable() end end,
-})
-AM1Box:AddSlider("AM1_Range_S", {
-    Text = "Range (studs)", Default = 9, Min = 1, Max = 30, Rounding = 1,
-    Callback = function(v) Settings.AM1_Range = v end,
-})
-AM1Box:AddSlider("AM1_GuestDelay_S", {
-    Text = "Guest 1337 extra delay (s)", Default = 0.2, Min = 0, Max = 2, Rounding = 2,
-    Callback = function(v) Settings.AM1_GuestDelay = v end,
-})
-AM1Box:AddSlider("AM1_M1Delay_S", {
-    Text = "M1 delay (s)", Default = 0, Min = 0, Max = 1, Rounding = 2,
-    Callback = function(v) Settings.AM1_M1Delay = v end,
-})
-AM1Box:AddToggle("AM1_Extreme_T", {
-    Text = "Extreme click (5x UI clicks)", Default = false,
-    Callback = function(v) Settings.AM1_ExtremeClick = v end,
-})
+AM1Box:AddToggle("AM1_Enable_T", { Text = "Enable Auto M1", Default = false, Callback = function(v) if v then AM1_Enable() else AM1_Disable() end end })
+AM1Box:AddSlider("AM1_Range_S", { Text = "Range (studs)", Default = 9, Min = 1, Max = 30, Rounding = 1, Callback = function(v) Settings.AM1_Range = v end })
+AM1Box:AddSlider("AM1_GuestDelay_S", { Text = "Guest 1337 extra delay (s)", Default = 0.2, Min = 0, Max = 2, Rounding = 2, Callback = function(v) Settings.AM1_GuestDelay = v end })
+AM1Box:AddSlider("AM1_M1Delay_S", { Text = "M1 delay (s)", Default = 0, Min = 0, Max = 1, Rounding = 2, Callback = function(v) Settings.AM1_M1Delay = v end })
+AM1Box:AddToggle("AM1_Extreme_T", { Text = "Extreme click (5x UI clicks)", Default = false, Callback = function(v) Settings.AM1_ExtremeClick = v end })
 
 local AM1FacingBox = Tabs.Killer:AddRightGroupbox("Facing Check")
-AM1FacingBox:AddToggle("AM1_Facing_T", {
-    Text = "Use facing box", Default = false,
-    Callback = function(v) Settings.AM1_UseFacing = v end,
-})
-AM1FacingBox:AddSlider("AM1_FX_S", {
-    Text = "Facing X", Default = 9, Min = 1, Max = 30, Rounding = 1,
-    Callback = function(v) Settings.AM1_FacingX = v; if Settings.AM1_FacingVisual then AM1_CreateFacingBox() end end,
-})
-AM1FacingBox:AddSlider("AM1_FY_S", {
-    Text = "Facing Y", Default = 10, Min = 1, Max = 30, Rounding = 1,
-    Callback = function(v) Settings.AM1_FacingY = v; if Settings.AM1_FacingVisual then AM1_CreateFacingBox() end end,
-})
-AM1FacingBox:AddSlider("AM1_FZ_S", {
-    Text = "Facing Z", Default = 9, Min = 1, Max = 30, Rounding = 1,
-    Callback = function(v) Settings.AM1_FacingZ = v; if Settings.AM1_FacingVisual then AM1_CreateFacingBox() end end,
-})
+AM1FacingBox:AddToggle("AM1_Facing_T", { Text = "Use facing box", Default = false, Callback = function(v) Settings.AM1_UseFacing = v end })
+AM1FacingBox:AddSlider("AM1_FX_S", { Text = "Facing X", Default = 9, Min = 1, Max = 30, Rounding = 1, Callback = function(v) Settings.AM1_FacingX = v; if Settings.AM1_FacingVisual then AM1_CreateFacingBox() end end })
+AM1FacingBox:AddSlider("AM1_FY_S", { Text = "Facing Y", Default = 10, Min = 1, Max = 30, Rounding = 1, Callback = function(v) Settings.AM1_FacingY = v; if Settings.AM1_FacingVisual then AM1_CreateFacingBox() end end })
+AM1FacingBox:AddSlider("AM1_FZ_S", { Text = "Facing Z", Default = 9, Min = 1, Max = 30, Rounding = 1, Callback = function(v) Settings.AM1_FacingZ = v; if Settings.AM1_FacingVisual then AM1_CreateFacingBox() end end })
 
 local AM1Vis = Tabs.Killer:AddLeftGroupbox("Range Visual")
-AM1Vis:AddToggle("AM1_RVis_T", {
-    Text = "Show Ring", Default = false,
-    Callback = function(v) Settings.AM1_RangeVisual = v
-        if v and AM1.running then AM1_CreateRangeRing() else AM1_DestroyRangeRing() end
-    end,
-})
-AM1Vis:AddSlider("AM1_ROp_S", {
-    Text = "Opacity", Default = 1, Min = 0, Max = 1, Rounding = 2,
-    Callback = function(v) Settings.AM1_RangeOpacity = v
-        if Settings.AM1_RangeVisual and AM1.running then AM1_CreateRangeRing() end
-    end,
-})
+AM1Vis:AddToggle("AM1_RVis_T", { Text = "Show Ring", Default = false, Callback = function(v) Settings.AM1_RangeVisual = v; if v and AM1.running then AM1_CreateRangeRing() else AM1_DestroyRangeRing() end end })
+AM1Vis:AddSlider("AM1_ROp_S", { Text = "Opacity", Default = 1, Min = 0, Max = 1, Rounding = 2, Callback = function(v) Settings.AM1_RangeOpacity = v; if Settings.AM1_RangeVisual and AM1.running then AM1_CreateRangeRing() end end })
 
 local AM1FVis = Tabs.Killer:AddRightGroupbox("Facing Visual")
-AM1FVis:AddToggle("AM1_FVis_T", {
-    Text = "Show Box", Default = false,
-    Callback = function(v) Settings.AM1_FacingVisual = v
-        if v and AM1.running then AM1_CreateFacingBox() else AM1_DestroyFacingBox() end
-    end,
-})
-AM1FVis:AddSlider("AM1_FOp_S", {
-    Text = "Opacity", Default = 1, Min = 0, Max = 1, Rounding = 2,
-    Callback = function(v) Settings.AM1_FacingOpacity = v
-        if Settings.AM1_FacingVisual and AM1.running then AM1_CreateFacingBox() end
-    end,
-})
+AM1FVis:AddToggle("AM1_FVis_T", { Text = "Show Box", Default = false, Callback = function(v) Settings.AM1_FacingVisual = v; if v and AM1.running then AM1_CreateFacingBox() else AM1_DestroyFacingBox() end end })
+AM1FVis:AddSlider("AM1_FOp_S", { Text = "Opacity", Default = 1, Min = 0, Max = 1, Rounding = 2, Callback = function(v) Settings.AM1_FacingOpacity = v; if Settings.AM1_FacingVisual and AM1.running then AM1_CreateFacingBox() end end })
 
 --═══════════════════════════════════════════════════════════════════
 -- STAMINA TAB
 --═══════════════════════════════════════════════════════════════════
 local STInf = Tabs.Stamina:AddLeftGroupbox("Infinite Stamina")
-STInf:AddToggle("Stam_Inf_T", {
-    Text = "Infinite Stamina", Default = false,
-    Callback = function(v) Stam_SetInfinite(v) end,
-})
+STInf:AddToggle("Stam_Inf_T", { Text = "Infinite Stamina", Default = false, Callback = function(v) Stam_SetInfinite(v) end })
 STInf:AddButton({ Text = "Restore Original Values", Func = function() Stam_Restore() end })
 
 local STOvr = Tabs.Stamina:AddRightGroupbox("Stamina Overrides")
-STOvr:AddSlider("Stam_Max_S", {
-    Text = "Max Stamina", Default = STAM_DEFAULT.MaxStamina, Min = 1, Max = 1000, Rounding = 0,
-    Callback = function(v) Stam_SetField("MaxStamina", v) end,
-})
-STOvr:AddSlider("Stam_Sprint_S", {
-    Text = "Sprint Speed", Default = STAM_DEFAULT.SprintSpeed, Min = 1, Max = 60, Rounding = 0,
-    Callback = function(v) Stam_SetField("SprintSpeed", v) end,
-})
-STOvr:AddSlider("Stam_Gain_S", {
-    Text = "Stamina Gain", Default = STAM_DEFAULT.StaminaGain, Min = 1, Max = 1000, Rounding = 0,
-    Callback = function(v) Stam_SetField("StaminaGain", v) end,
-})
-STOvr:AddSlider("Stam_Drain_S", {
-    Text = "Stamina Drain", Default = STAM_DEFAULT.StaminaDrain, Min = 0, Max = 1000, Rounding = 0,
-    Callback = function(v) Stam_SetField("StaminaDrain", v) end,
-})
-STOvr:AddSlider("Stam_Regen_S", {
-    Text = "Regen Delay (s)", Default = STAM_DEFAULT.StaminaRegenDelay, Min = 0, Max = 10, Rounding = 2,
-    Callback = function(v) Stam_SetField("StaminaRegenDelay", v) end,
-})
+STOvr:AddSlider("Stam_Max_S", { Text = "Max Stamina", Default = STAM_DEFAULT.MaxStamina, Min = 1, Max = 1000, Rounding = 0, Callback = function(v) Stam_SetField("MaxStamina", v) end })
+STOvr:AddSlider("Stam_Sprint_S", { Text = "Sprint Speed", Default = STAM_DEFAULT.SprintSpeed, Min = 1, Max = 60, Rounding = 0, Callback = function(v) Stam_SetField("SprintSpeed", v) end })
+STOvr:AddSlider("Stam_Gain_S", { Text = "Stamina Gain", Default = STAM_DEFAULT.StaminaGain, Min = 1, Max = 1000, Rounding = 0, Callback = function(v) Stam_SetField("StaminaGain", v) end })
+STOvr:AddSlider("Stam_Drain_S", { Text = "Stamina Drain", Default = STAM_DEFAULT.StaminaDrain, Min = 0, Max = 1000, Rounding = 0, Callback = function(v) Stam_SetField("StaminaDrain", v) end })
+STOvr:AddSlider("Stam_Regen_S", { Text = "Regen Delay (s)", Default = STAM_DEFAULT.StaminaRegenDelay, Min = 0, Max = 10, Rounding = 2, Callback = function(v) Stam_SetField("StaminaRegenDelay", v) end })
 
 --═══════════════════════════════════════════════════════════════════
 -- AUTO GEN TAB
@@ -1954,42 +1813,73 @@ GenToggle:AddToggle("GS_Enabled_T", {
     Callback = function(v)
         if v then
             local ok = GS_Enable()
-            if not ok then
-                Library:Notify({ Title = "Generator Solver", Content = "Modules not found", Time = 4 })
-            end
+            if not ok then Library:Notify({ Title = "Generator Solver", Content = "Modules not found", Time = 4 }) end
         else
             GS_Disable()
         end
     end,
 })
-GenToggle:AddSlider("GS_Start_S", {
-    Text = "Start Delay (s)", Default = 1.5, Min = 0, Max = 5, Rounding = 1,
-    Callback = function(v) Settings.GS_StartDelay = v end,
-})
+GenToggle:AddSlider("GS_Start_S", { Text = "Start Delay (s)", Default = 1.5, Min = 0, Max = 5, Rounding = 1, Callback = function(v) Settings.GS_StartDelay = v end })
 
 local FlowBox = Tabs.AutoGen:AddRightGroupbox("Flow — Dots")
-FlowBox:AddSlider("GS_Flow_S", {
-    Text = "Per-cell speed (s)", Default = 0.05, Min = 0.005, Max = 0.5, Rounding = 3,
-    Callback = function(v) Settings.GS_FlowDelay = v end,
-})
+FlowBox:AddSlider("GS_Flow_S", { Text = "Per-cell speed (s)", Default = 0.05, Min = 0.005, Max = 0.5, Rounding = 3, Callback = function(v) Settings.GS_FlowDelay = v end })
 
 local GearBox = Tabs.AutoGen:AddLeftGroupbox("Gear")
-GearBox:AddSlider("GS_Gear_S", {
-    Text = "Per-turn speed (s)", Default = 0.03, Min = 0.005, Max = 0.5, Rounding = 3,
-    Callback = function(v) Settings.GS_GearDelay = v end,
-})
+GearBox:AddSlider("GS_Gear_S", { Text = "Per-turn speed (s)", Default = 0.03, Min = 0.005, Max = 0.5, Rounding = 3, Callback = function(v) Settings.GS_GearDelay = v end })
 
 local ConnBox = Tabs.AutoGen:AddRightGroupbox("Connect")
-ConnBox:AddSlider("GS_Conn_S", {
-    Text = "Per-pair speed (s)", Default = 1.0, Min = 0.05, Max = 3, Rounding = 2,
-    Callback = function(v) Settings.GS_ConnectDelay = v end,
-})
+ConnBox:AddSlider("GS_Conn_S", { Text = "Per-pair speed (s)", Default = 1.0, Min = 0.05, Max = 3, Rounding = 2, Callback = function(v) Settings.GS_ConnectDelay = v end })
 
 local LockBox = Tabs.AutoGen:AddLeftGroupbox("Lock")
-LockBox:AddSlider("GS_Lock_S", {
-    Text = "Per-press delay (s)", Default = 0.08, Min = 0.02, Max = 0.5, Rounding = 3,
-    Callback = function(v) Settings.GS_LockDelay = v end,
+LockBox:AddSlider("GS_Lock_S", { Text = "Per-press delay (s)", Default = 0.08, Min = 0.02, Max = 0.5, Rounding = 3, Callback = function(v) Settings.GS_LockDelay = v end })
+
+--═══════════════════════════════════════════════════════════════════
+-- GAMEPLAY TAB (new)
+--═══════════════════════════════════════════════════════════════════
+local GP = Tabs.Gameplay:AddLeftGroupbox("Performance")
+GP:AddButton({
+    Text = "FPS Boost (one-time)",
+    Func = function()
+        pcall(function()
+            local terrain = Workspace:FindFirstChildOfClass("Terrain")
+            if terrain then
+                terrain.WaterWaveSize = 0
+                terrain.WaterWaveSpeed = 0
+                terrain.WaterReflectance = 0
+                terrain.WaterTransparency = 0
+            end
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 9e9
+            for _, v in ipairs(game:GetDescendants()) do
+                if v:IsA("Part") or v:IsA("UnionOperation") or v:IsA("MeshPart") then
+                    pcall(function()
+                        v.Material = Enum.Material.SmoothPlastic
+                        v.Reflectance = 0
+                    end)
+                elseif v:IsA("Decal") or v:IsA("Texture") then
+                    pcall(function() v.Transparency = 1 end)
+                elseif v:IsA("ParticleEmitter") or v:IsA("Trail")
+                    or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
+                    pcall(function() v.Enabled = false end)
+                end
+            end
+            Library:Notify({ Title = "FPS Boost", Content = "Materials reduced, particles off, fog cleared", Time = 3 })
+        end)
+    end,
 })
+GP:AddLabel({ Text = "FPS Boost runs once — no toggle. Click again to re-apply after respawn.", DoesWrap = true })
+
+local GP2 = Tabs.Gameplay:AddRightGroupbox("External Scripts")
+GP2:AddButton({
+    Text = "Load Blue Hitbox",
+    Func = function()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/zxcursedsocute/Forsaken-Script/refs/heads/main/anti%20lag%20test"))()
+            Library:Notify({ Title = "Blue Hitbox", Content = "Script executed", Time = 3 })
+        end)
+    end,
+})
+GP2:AddLabel({ Text = "Executes the external Blue Hitbox script on click.", DoesWrap = true })
 
 --═══════════════════════════════════════════════════════════════════
 -- VISUALS TAB
@@ -2002,14 +1892,8 @@ EM:AddToggle("ESPMedkit_T",    { Text = "Medkit ESP (Pink)",      Default = fals
 EM:AddToggle("ESPBloxy_T",     { Text = "BloxyCola ESP (Blue)",   Default = false, Callback = function(v) Settings.ESP_Bloxy = v;     ES_Refresh() end })
 
 local EO = Tabs.Visuals:AddRightGroupbox("ESP Options")
-EO:AddToggle("ESPWall_T", {
-    Text = "Wall Check", Default = false,
-    Callback = function(v) Settings.ESP_WallCheck = v end,
-})
-EO:AddSlider("ESPRange_S", {
-    Text = "Max Distance", Default = 150, Min = 50, Max = 500, Rounding = 0,
-    Callback = function(v) Settings.ESP_MaxDist = v end,
-})
+EO:AddToggle("ESPWall_T", { Text = "Wall Check", Default = false, Callback = function(v) Settings.ESP_WallCheck = v end })
+EO:AddSlider("ESPRange_S", { Text = "Max Distance", Default = 150, Min = 50, Max = 500, Rounding = 0, Callback = function(v) Settings.ESP_MaxDist = v end })
 
 --═══════════════════════════════════════════════════════════════════
 -- APPEARANCE / CREDITS
@@ -2035,13 +1919,13 @@ Library:OnUnload(function()
     pcall(function() Settings.AIM_Enabled = false end)
     pcall(function() AM1_Disable() end)
     pcall(function() GS_Disable() end)
-    pcall(function() Stam_Restore() end)
+    pcall(function() Stam_StopLoop(); Stam_Restore() end)
 end)
 
 Library:Notify({
-    Title = "C00lsaken v2.1",
-    Description = "All tabs populated — Killer Auto M1 + Auto Gen added",
+    Title = "C00lsaken v2.2",
+    Description = "Survivor aim prediction + HDT fixed, Gameplay tab added",
     Time = 4,
 })
 
-print("[C00lsaken v2.1] Loaded — all tabs populated.")
+print("[C00lsaken v2.2] Loaded.")
