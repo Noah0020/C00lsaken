@@ -1,9 +1,10 @@
 --[[
-    C00LSAKEN v3.3 — Merged build (FIXED)
-    - Buffer-safe ability buffers (works on executors without buffer)
-    - Red theme forced (Rose / Blood / Ruby fallback chain)
-    UI:        Mini5 (Cursedsaken native)
-    Toggle UI: RightControl
+    C00LSAKEN v3.0 — Merged build
+    Core:      v2.2 (Auto Block / HDT / Punch Aim / Survivor Aim / ESP / Stamina / Killer M1 / Gen)
+    Added:     Silent Aim, Manual Aimbot, Hitbox Expander, Anti-Debuffs, Anti-Bait utilities
+               Vee / Guest / Shedletsky / Chance / Jane Doe / Elliot / Two Time / 007n7 exploits
+               Noli / Nosferatu / c00lkidd / Slasher killer exploits
+    UI:        Mini5 (Cursed / red)
 ]]
 
 --═══════════════════════════════════════════════════════════════════
@@ -55,6 +56,7 @@ local function _num(v, d) return tonumber(v) or d end
 -- SETTINGS
 --═══════════════════════════════════════════════════════════════════
 local Settings = {
+    -- Auto Block
     AB_Enabled = false, AB_Mode = "Guest1337", AB_ShowZone = true,
     AB_FacingMode = "Circle",
     AB_CircleRadius = 8, AB_DotRadius = 5, AB_DotDistance = 4,
@@ -74,49 +76,112 @@ local Settings = {
         ["Azure"]     = { width=6, height=6, length=9, distance=3 },
     },
     SelectedKillerBox = "Default",
+
+    -- HDT / Anti Bait / Punch Aim
     ABT_Enabled = false, ABT_Duration = 0.5,
     HDT_Enabled = false, HDT_Speed = 40, HDT_Delay = 0.05, HDT_Duration = 0.6,
     PA_Enabled = false, PA_Prediction = 4,
     AP_Enabled = false, AP_Delay = 0.5,
+
+    -- Survivor Auto Aim
     AIM_Enabled = false, AIM_Mode = "Character", AIM_Prediction = 4,
     AIM_LockTime = 0.7, AIM_MinDist = 3, AIM_Range = 55,
     AIM_OnSlash = true, AIM_OnBlock = true, AIM_OnDagger = true,
     AIM_OnAxe = true, AIM_OnShoot = true,
-    SA_Enabled = false, SA_FOV = 150, SA_WallCheck = false, SA_Prediction = 0.15,
+
+    -- Silent Aim
+    SA_Enabled = false, SA_FOV = 150, SA_WallCheck = false,
+    SA_Prediction = 0.15,
+
+    -- Manual Aimbot
     MA_Enabled = false, MA_Method = "Both", MA_Target = "Auto",
-    MA_Distance = 20, MA_Prediction = 0.1, MA_Smoothness = 35, MA_PingComp = true,
+    MA_Distance = 20, MA_Prediction = 0.1, MA_Smoothness = 35,
+    MA_PingComp = true,
+
+    -- Hitbox Expander
     HBE_Enabled = false, HBE_KillerAnims = {}, HBE_SurvivorAnims = {},
+
+    -- ESP
     ESP_Killer = false, ESP_Survivor = false, ESP_Generator = false,
     ESP_Medkit = false, ESP_Bloxy = false,
     ESP_FakeGenerator = false, ESP_DoneGenerator = false,
     ESP_WallCheck = false, ESP_MaxDist = 150,
+
+    -- Objects ESP
     OBJ_TaphTraps = false, OBJ_VeerGraffiti = false, OBJ_TwoTimeRitual = false,
     OBJ_Builderman = false, OBJ_AzureTraps = false,
+
+    -- Anti-Debuffs
+    ANTI_Bleeding = false, ANTI_Nausea = false, ANTI_Blindness = false,
+    ANTI_Confusion = false, ANTI_Hacked = false, ANTI_Glitched = false,
+    ANTI_Corrupted = false, ANTI_Hallucination = false, ANTI_Oblivious = false,
+    ANTI_Subspaced = false, ANTI_Slowness = false, ANTI_Stunned = false,
+    ANTI_FallSlow = false,
+
+    -- Anti-Bait utilities
+    ABU_AntiPull = false, ABU_DeleteTrail = false, ABU_WalkablePuddle = false,
+    ABU_KillDoorCollision = false, ABU_AntiFakeGen = false,
+    ABU_AntiFakeNoli = false, ABU_AntiClone007 = false,
+
+    -- Stamina
     Stam_Infinite = false, Stam_Max = 100, Stam_Sprint = 26,
     Stam_Gain = 20, Stam_Drain = 10, Stam_Regen = 0.5,
+
+    -- Killer M1
     AM1_Enabled = false, AM1_Range = 9, AM1_GuestDelay = 0.2,
     AM1_M1Delay = 0, AM1_ExtremeClick = false, AM1_UseFacing = false,
     AM1_FacingX = 9, AM1_FacingY = 10, AM1_FacingZ = 9,
+
+    -- Vee
     VEE_AutoTrick = false, VEE_SkateControl = false, VEE_CustomStats = false,
     VEE_AntiRebound = false, VEE_UnlimitedSk8 = false,
     VEE_Speed = 1.15, VEE_TrickSpeed = 1.42, VEE_BumpPower = 11.9, VEE_TrickCD = 1,
+
+    -- Guest
     Guest_ChargeAim = false, Guest_ChargeControl = false,
+
+    -- Shedletsky
     Shed_AutoSlash = false, Shed_SlashDelay = 0.1, Shed_SlashDist = 10,
     Shed_TPBehind = false, Shed_TPDist = 3.5,
+
+    -- Chance
     Chance_AutoCoin = false, Chance_ShootHelper = false,
+    Chance_ShootLockTime = 1.6, Chance_Shoot360 = false,
+
+    -- Jane Doe
     Jane_CrystalAim = false, Jane_HatchetAim = false,
     Jane_InfHold = false, Jane_MaxCharge = false,
+    Jane_AimMethod = "HumanoidRoot Lock + Camera Lock",
+
+    -- Elliot
     Elliot_PizzaAim = false, Elliot_PizzaLowHP = false,
-    Elliot_PizzaSpeed = 80, Elliot_PizzaPrediction = 0.5, Elliot_PizzaSmooth = 0.5,
+    Elliot_PizzaSpeed = 80, Elliot_PizzaPrediction = 0.5,
+    Elliot_PizzaSmooth = 0.5,
+
+    -- Two Time
     TT_AutoBackstab = false, TT_BackstabType = "Teleport",
     TT_MaxDist = 8, TT_BehindDist = 1.7, TT_DelayStab = 0.08,
     TT_Duration = 0.7, TT_KillerNoclip = false, TT_Prediction = false,
+
+    -- 007n7
     N007_BodyBlock = false, N007_BB_Distance = 7,
     N007_BB_Target = "Killer", N007_BB_Prediction = 15,
+    N007_LMS = false, N007_AutoInvis = false,
+
+    -- Noli
     Noli_RushControl = false, Noli_AutoTarget = false,
     Noli_AntiCrash = false, Noli_DashSpeed = 60,
+
+    -- Nosferatu
     Nos_FlyControl = false, Nos_DiveControl = false, Nos_CataclysmControl = false,
+
+    -- c00lkidd
+    Cool_OverrideControl = false, Cool_CustomSpeed = false, Cool_Speed = 90,
+
+    -- Slasher
     Slash_CustomRage = false, Slash_RageMult = 2.1,
+
+    -- Generator Solver
     GS_Enabled = false, GS_StartDelay = 1.5,
     GS_FlowDelay = 0.05, GS_ConnectDelay = 1.0,
     GS_GearDelay = 0.03, GS_LockDelay = 0.08,
@@ -125,11 +190,7 @@ local Settings = {
 --═══════════════════════════════════════════════════════════════════
 -- ANIM ID TABLES
 --═══════════════════════════════════════════════════════════════════
-local function _idTable(list)
-    local t = {}
-    for _, v in ipairs(list) do t["rbxassetid://"..v] = true; t[tostring(v)] = true end
-    return t
-end
+local function _idTable(list) local t = {}; for _, v in ipairs(list) do t["rbxassetid://"..v] = true; t[tostring(v)] = true end; return t end
 
 local ParrySounds = _idTable({102808968188291,114975236395509,116616310968045,117828699507982,120902177402976,123825742002486,125854302746190,132298811847315,135209101640984,18568553101,423041300,423041325,423041356,81114852524420,82772022662025,86208973578215,91165993312513,95135835034592})
 
@@ -139,39 +200,31 @@ local AntiBaitAnims = _idTable({100926346851492,102517104852347,115706752305794,
 
 local HDT_Anims = _idTable({72722244508749,96959123077498,95802026624883,140671644163156,100926346851492})
 
---═══════════════════════════════════════════════════════════════════
--- ABILITY BUFFERS — FIXED (buffer-safe)
---═══════════════════════════════════════════════════════════════════
-local _hasBuffer = (buffer ~= nil and buffer.create ~= nil and buffer.writeu8 ~= nil)
+local BlockAnimIds = _idTable({72722244508749,96959123077498,95802026624883,140671644163156,100926346851492})
 
+--═══════════════════════════════════════════════════════════════════
+-- UTILITIES: Fire ability via buffer
+--═══════════════════════════════════════════════════════════════════
 local function _pack(bytes)
-    if not _hasBuffer then return nil end
-    local ok, result = pcall(function()
-        local b = buffer.create(#bytes)
-        for i = 1, #bytes do buffer.writeu8(b, i-1, bytes[i]) end
-        return b
-    end)
-    return ok and result or nil
+    local b = buffer.create(#bytes)
+    for i = 1, #bytes do buffer.writeu8(b, i-1, bytes[i]) end
+    return b
 end
-
-local ABILITY_BUF = {}
-if _hasBuffer then
-    pcall(function()
-        ABILITY_BUF.Block    = _pack({3, 5, 0, 0, 0, 66, 108, 111, 99, 107})
-        ABILITY_BUF.Clone    = _pack({3, 5, 0, 0, 0, 67, 108, 111, 110, 101})
-        ABILITY_BUF.Punch    = _pack({3, 5, 0, 0, 0, 80, 117, 110, 99, 104})
-        ABILITY_BUF.Slash    = _pack({3, 5, 0, 0, 0, 83, 108, 97, 115, 104})
-        ABILITY_BUF.Stab     = _pack({3, 4, 0, 0, 0, 83, 116, 97, 98})
-        ABILITY_BUF.Dagger   = _pack({3, 6, 0, 0, 0, 68, 97, 103, 103, 101, 114})
-        ABILITY_BUF.Shoot    = _pack({3, 5, 0, 0, 0, 83, 104, 111, 111, 116})
-        ABILITY_BUF.CoinFlip = _pack({3, 8, 0, 0, 0, 67, 111, 105, 110, 70, 108, 105, 112})
-        ABILITY_BUF.Crystal  = _pack({3, 7, 0, 0, 0, 67, 114, 121, 115, 116, 97, 108})
-        ABILITY_BUF.Axe      = _pack({3, 3, 0, 0, 0, 65, 120, 101})
-        ABILITY_BUF.Nova     = _pack({3, 4, 0, 0, 0, 78, 111, 118, 97})
-    end)
-end
-print("[C00lsaken] Buffer support:", _hasBuffer)
-
+local ABILITY_BUF = {
+    Block        = _pack({3, 5, 0, 0, 0, 66, 108, 111, 99, 107}),
+    Clone        = _pack({3, 5, 0, 0, 0, 67, 108, 111, 110, 101}),
+    Punch        = _pack({3, 5, 0, 0, 0, 80, 117, 110, 99, 104}),
+    Slash        = _pack({3, 5, 0, 0, 0, 83, 108, 97, 115, 104}),
+    Stab         = _pack({3, 4, 0, 0, 0, 83, 116, 97, 98}),
+    Dagger       = _pack({3, 6, 0, 0, 0, 68, 97, 103, 103, 101, 114}),
+    Shoot        = _pack({3, 5, 0, 0, 0, 83, 104, 111, 111, 116}),
+    CoinFlip     = _pack({3, 8, 0, 0, 0, 67, 111, 105, 110, 70, 108, 105, 112}),
+    Crystal      = _pack({3, 7, 0, 0, 0, 67, 114, 121, 115, 116, 97, 108}),
+    Axe          = _pack({3, 3, 0, 0, 0, 65, 120, 101}),
+    NoliNova     = _pack({3, 4, 0, 0, 0, 78, 111, 118, 97}),
+    NoliStab     = _pack({3, 4, 0, 0, 0, 83, 116, 97, 98}),
+    CorruptEnergy = _pack({3, 13, 0, 0, 0, 67, 111, 114, 114, 117, 112, 116, 69, 110, 101, 114, 103, 121}),
+}
 local function FireAbilityBuf(name)
     if not NetworkEvent then return end
     local buf = ABILITY_BUF[name]
@@ -179,7 +232,6 @@ local function FireAbilityBuf(name)
         pcall(function() NetworkEvent:FireServer("UseActorAbility", { buf }) end)
     else
         pcall(function() NetworkEvent:FireServer("UseActorAbility", { name }) end)
-        pcall(function() NetworkEvent:FireServer("UseActorAbility", name) end)
     end
 end
 
@@ -361,7 +413,7 @@ local function AB_UpdateVisual(model, hrp)
     if not LocalRoot or not LocalRoot.Parent then return end
     local v = AB.visual[model]
     if not v then
-        local folder = Instance.new("Folder"); folder.Name="C00L_AB_Visual"; folder.Parent=Workspace
+        local folder = Instance.new("Folder"); folder.Name="GS_AB_Visual"; folder.Parent=Workspace
         v = { folder=folder, parts={}, mode=nil }; AB.visual[model]=v
     end
     local inZoneNow = AB_IsInZone(LocalRoot.Position, hrp, model)
@@ -502,7 +554,7 @@ local function ABT_RunSequence(character)
     local khrp = killer and killer:FindFirstChild("HumanoidRootPart"); if not khrp then return end
     local oldPart = character.PrimaryPart
     local part = Instance.new("Part")
-    part.Name="C00L_ABT"; part.Size=Vector3.new(2,2,2); part.Transparency=1
+    part.Name="GS_ABT"; part.Size=Vector3.new(2,2,2); part.Transparency=1
     part.CanCollide=false; part.Massless=true; part.CFrame=hrp.CFrame; part.Parent=character
     character.PrimaryPart = part
     local bv = Instance.new("BodyVelocity")
@@ -636,7 +688,7 @@ end
 --═══════════════════════════════════════════════════════════════════
 local HDT = {
     running = false, debounce = false, animConn = nil, watcher = nil,
-    charConn = nil, bind = "C00L_HDT_Bind", lastDmg = 0, active = nil,
+    charConn = nil, bind = "GS_HDT_Bind", lastDmg = 0, active = nil,
     Speed    = tonumber(Settings.HDT_Speed)    or 40,
     Duration = tonumber(Settings.HDT_Duration) or 0.6,
     Delay    = tonumber(Settings.HDT_Delay)    or 0.05,
@@ -747,7 +799,6 @@ local function ExtractAbility(arg)
     local t = type(arg)
     if t == "string" then return arg end
     if t == "buffer" then
-        if not _hasBuffer then return nil end
         local ok, s = pcall(function()
             local len = buffer.readu8(arg, 1)
             if len < 1 or len > 64 then return nil end
@@ -868,15 +919,18 @@ task.spawn(Aim_SetupHook)
 --═══════════════════════════════════════════════════════════════════
 local SilentAim = { installed = false, enabled = false }
 local _targetCache = { target = nil, nextScan = 0 }
+
 local function SilentAim_GetTarget()
     local now = tick()
     if now < _targetCache.nextScan then return _targetCache.target end
     _targetCache.nextScan = now + 0.1
     _targetCache.target = nil
+
     local cam = Workspace.CurrentCamera; if not cam then return nil end
     local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
     local kf = GetKillersFolder(); if not kf then return nil end
     local best, bestScore = nil, math.huge
+
     for _, k in ipairs(kf:GetChildren()) do
         local kr = k:FindFirstChild("HumanoidRootPart")
         local kh = k:FindFirstChildOfClass("Humanoid")
@@ -890,7 +944,9 @@ local function SilentAim_GetTarget()
                         rp.FilterType = Enum.RaycastFilterType.Exclude
                         rp.FilterDescendantsInstances = { LocalPlayer.Character, k, cam }
                         local hit = Workspace:Raycast(cam.CFrame.Position, kr.Position - cam.CFrame.Position, rp)
-                        if hit then d = math.huge end
+                        if hit then
+                            d = math.huge
+                        end
                     end
                     if d < bestScore then best, bestScore = kr, d end
                 end
@@ -898,11 +954,13 @@ local function SilentAim_GetTarget()
         end
     end
     if not best then return nil end
+
     local ping = 0.05
     pcall(function() ping = math.max(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000, 0.05) end)
     _targetCache.target = best.Position + (best.AssemblyLinearVelocity or Vector3.new()) * ping * Settings.SA_Prediction
     return _targetCache.target
 end
+
 local function SilentAim_Install()
     if SilentAim.installed then return true end
     if not hookfunction then return false end
@@ -927,6 +985,7 @@ local function SilentAim_Install()
     if ok2 then SilentAim.installed = true end
     return ok2
 end
+
 local function SilentAim_Enable()
     if SilentAim_Install() then Settings.SA_Enabled = true end
     return Settings.SA_Enabled
@@ -936,17 +995,13 @@ local function SilentAim_Disable() Settings.SA_Enabled = false end
 --═══════════════════════════════════════════════════════════════════
 -- MANUAL AIMBOT
 --═══════════════════════════════════════════════════════════════════
-local MAimbot = { running = false, conn = nil }
+local MAimbot = { running = false, conn = nil, currentTarget = nil, targetChar = nil }
+
 local function MAimbot_Nearest()
     local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return nil end
-    local folder
-    if Settings.MA_Target == "Killers" then folder = GetKillersFolder()
-    elseif Settings.MA_Target == "Survivors" then folder = GetSurvivorsFolder()
-    else
-        local parent = LocalPlayer.Character.Parent
-        folder = (parent and parent.Name == "Killers") and GetSurvivorsFolder() or GetKillersFolder()
-    end
+    local folder = (Settings.MA_Target == "Survivors" or Settings.MA_Target == "Auto" and LocalPlayer.Character.Parent.Name == "Killers")
+        and GetSurvivorsFolder() or GetKillersFolder()
     if not folder then return nil end
     local best, bd = nil, Settings.MA_Distance
     for _, m in ipairs(folder:GetChildren()) do
@@ -961,6 +1016,7 @@ local function MAimbot_Nearest()
     end
     return best
 end
+
 local function MAimbot_Loop()
     while MAimbot.running do
         RunService.Heartbeat:Wait()
@@ -970,12 +1026,14 @@ local function MAimbot_Loop()
         if not hum or not myRoot or hum.Health <= 0 then continue end
         local target = MAimbot_Nearest()
         if not target then continue end
+
         local ping = 0.05
         if Settings.MA_PingComp then
             pcall(function() ping = math.max(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000, 0.05) end)
         end
         local tVel = target.AssemblyLinearVelocity or Vector3.new()
         local predPos = target.Position + tVel * (Settings.MA_Prediction + ping * 0.5)
+
         local lerp = math.clamp(Settings.MA_Smoothness / 100, 0.02, 1) * 0.6
         if Settings.MA_Method == "Camera" or Settings.MA_Method == "Both" then
             local cam = Workspace.CurrentCamera
@@ -986,13 +1044,22 @@ local function MAimbot_Loop()
         end
     end
 end
-local function MAimbot_Enable() if not MAimbot.running then MAimbot.running = true; MAimbot.conn = task.spawn(MAimbot_Loop) end end
-local function MAimbot_Disable() MAimbot.running = false; if MAimbot.conn then pcall(task.cancel, MAimbot.conn); MAimbot.conn = nil end end
+
+local function MAimbot_Enable()
+    if MAimbot.running then return end
+    MAimbot.running = true
+    MAimbot.conn = task.spawn(MAimbot_Loop)
+end
+local function MAimbot_Disable()
+    MAimbot.running = false
+    if MAimbot.conn then pcall(task.cancel, MAimbot.conn); MAimbot.conn = nil end
+end
 
 --═══════════════════════════════════════════════════════════════════
 -- HITBOX EXPANDER
 --═══════════════════════════════════════════════════════════════════
 local HBE = { Enabled = false, loop = nil }
+
 task.spawn(function()
     local ok, body = pcall(function()
         return game:HttpGet("https://gist.githubusercontent.com/zxcursedsocute/4e0833a7a6cfdc537844b7545dd9079e/raw/gistfile1.json")
@@ -1003,6 +1070,7 @@ task.spawn(function()
     for k in pairs(data.a or {}) do Settings.HBE_KillerAnims[tostring(k)] = true end
     for k in pairs(data.b or {}) do Settings.HBE_SurvivorAnims[tostring(k)] = true end
 end)
+
 local function HBE_NearestKiller(myHRP)
     local kf = GetKillersFolder(); if not kf then return nil end
     local best, bd = nil, 60
@@ -1029,10 +1097,12 @@ local function HBE_NearestSurvivor(myHRP)
     end
     return best
 end
+
 local function HBE_Loop()
     while HBE.Enabled do
         RunService.Heartbeat:Wait()
-        local char = LocalPlayer.Character; if not char then continue end
+        local char = LocalPlayer.Character
+        if not char then continue end
         local hum = char:FindFirstChildOfClass("Humanoid")
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hum or not hrp then continue end
@@ -1063,28 +1133,43 @@ local function HBE_Loop()
     HBE.loop = nil
 end
 local function HBE_Enable() if not HBE.Enabled then HBE.Enabled = true; HBE.loop = task.spawn(HBE_Loop) end end
-local function HBE_Disable() HBE.Enabled = false; if HBE.loop then pcall(task.cancel, HBE.loop); HBE.loop = nil end end
+local function HBE_Disable()
+    HBE.Enabled = false
+    if HBE.loop then pcall(task.cancel, HBE.loop); HBE.loop = nil end
+end
 
 --═══════════════════════════════════════════════════════════════════
--- ANTI-DEBUFF
+-- ANTI-DEBUFF SYSTEM
 --═══════════════════════════════════════════════════════════════════
 local AntiDebuff = { installed = false, disabled = {} }
-local DEBUFF_MODULES = { Bleeding=true, Nausea=true, Blindness=true, Confusion=true, Hacked=true, Glitched=true, Corrupted=true, Hallucination=true, Oblivious=true, Subspaced=true, Slowness=true, Stunned=true }
+
+local DEBUFF_MODULES = {
+    Bleeding = true, Nausea = true, Blindness = true, Confusion = true,
+    Hacked = true, Glitched = true, Corrupted = true, Hallucination = true,
+    Oblivious = true, Subspaced = true, Slowness = true, Stunned = true,
+}
+
 local function AntiDebuff_Install()
     if AntiDebuff.installed then return end
     AntiDebuff.installed = true
+
     task.spawn(function()
         local se
-        pcall(function() se = ReplicatedStorage.Modules.Schematics.StatusEffects end)
+        pcall(function()
+            se = ReplicatedStorage.Modules.Schematics.StatusEffects
+        end)
         if not se then return end
+
         local function FindMod(name)
-            local m = se:FindFirstChild(name); if m then return m end
+            local m = se:FindFirstChild(name)
+            if m then return m end
             for _, sub in ipairs({"SurvivorExclusive","KillerExclusive"}) do
                 local s = se:FindFirstChild(sub)
                 if s and s:FindFirstChild(name) then return s[name] end
             end
             return nil
         end
+
         for name in pairs(DEBUFF_MODULES) do
             local mod = FindMod(name)
             if mod then
@@ -1103,6 +1188,8 @@ local function AntiDebuff_Install()
             end
         end
     end)
+
+    -- Anti Fall Slowness (attribute-based)
     task.spawn(function()
         while true do
             task.wait(1)
@@ -1112,6 +1199,7 @@ local function AntiDebuff_Install()
         end
     end)
 end
+
 local function AntiDebuff_Set(name, enabled)
     AntiDebuff_Install()
     AntiDebuff.disabled[name] = enabled
@@ -1121,6 +1209,7 @@ end
 -- ANTI-BAIT UTILITIES
 --═══════════════════════════════════════════════════════════════════
 local ABU = { conns = {} }
+
 local function ABU_StartPull()
     local function Protect(char)
         if not char then return end
@@ -1128,12 +1217,14 @@ local function ABU_StartPull()
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
         for _, ch in ipairs(hrp:GetChildren()) do
-            if ch.Name == "CatchVelocity" or ch:IsA("AlignPosition") or ch:IsA("LinearVelocity") or ch:IsA("BodyVelocity") or ch:IsA("BodyPosition") then
+            if ch.Name == "CatchVelocity" or ch:IsA("AlignPosition") or ch:IsA("LinearVelocity")
+               or ch:IsA("BodyVelocity") or ch:IsA("BodyPosition") then
                 pcall(function() ch:Destroy() end)
             end
         end
         table.insert(ABU.conns, hrp.ChildAdded:Connect(function(ch)
-            if Settings.ABU_AntiPull and (ch.Name == "CatchVelocity" or ch:IsA("AlignPosition") or ch:IsA("LinearVelocity") or ch:IsA("BodyVelocity") or ch:IsA("BodyPosition")) then
+            if Settings.ABU_AntiPull and (ch.Name == "CatchVelocity" or ch:IsA("AlignPosition")
+               or ch:IsA("LinearVelocity") or ch:IsA("BodyVelocity") or ch:IsA("BodyPosition")) then
                 task.wait(); pcall(function() ch:Destroy() end)
             end
         end))
@@ -1145,7 +1236,8 @@ local function ABU_StopPull()
     for _, c in ipairs(ABU.conns) do pcall(function() c:Disconnect() end) end
     ABU.conns = {}
 end
-local function ABU_StartFake()
+
+local function ABU_StartFake(dummy) -- Anti-fake generators / Noli / 007
     local ingame = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Ingame")
     if not ingame then return end
     local function Cleanup(inst)
@@ -1156,6 +1248,7 @@ local function ABU_StartFake()
     for _, d in ipairs(ingame:GetDescendants()) do Cleanup(d) end
     table.insert(ABU.conns, ingame.DescendantAdded:Connect(function(d) task.wait(0.1); Cleanup(d) end))
 end
+
 local function ABU_StartDeleteTrail()
     local ingame = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Ingame")
     if not ingame then return end
@@ -1163,6 +1256,7 @@ local function ABU_StartDeleteTrail()
     for _, c in ipairs(ingame:GetChildren()) do Clean(c) end
     table.insert(ABU.conns, ingame.ChildAdded:Connect(function(c) task.wait(); Clean(c) end))
 end
+
 local function ABU_StartWalkablePuddle()
     local ingame = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Ingame")
     if not ingame then return end
@@ -1170,11 +1264,14 @@ local function ABU_StartWalkablePuddle()
     for _, d in ipairs(ingame:GetDescendants()) do Set(d) end
     table.insert(ABU.conns, ingame.DescendantAdded:Connect(function(d) task.wait(); Set(d) end))
 end
+
 local function ABU_StartKillDoor()
     local ingame = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Ingame")
     if not ingame then return end
-    local map = ingame:FindFirstChild("Map"); if not map then return end
-    local mb = map:FindFirstChild("MapBoundaries"); if not mb then return end
+    local map = ingame:FindFirstChild("Map")
+    if not map then return end
+    local mb = map:FindFirstChild("MapBoundaries")
+    if not mb then return end
     for _, sub in ipairs({"KillerDoors","KillerOnly"}) do
         local s = mb:FindFirstChild(sub)
         if s then
@@ -1192,7 +1289,9 @@ local Stam = { running=false, thread=nil, mod=nil, saved=nil, Infinite=false }
 local function Stam_GetMod()
     local ok, m = pcall(function() return require(ReplicatedStorage.Systems.Character.Game.Sprinting) end)
     if ok and m then return m end
-    ok, m = pcall(function() return require(ReplicatedStorage:WaitForChild("Systems"):WaitForChild("Character"):WaitForChild("Game"):WaitForChild("Sprinting")) end)
+    ok, m = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Systems"):WaitForChild("Character"):WaitForChild("Game"):WaitForChild("Sprinting"))
+    end)
     return ok and m or nil
 end
 local function Stam_EnsureMod()
@@ -1200,7 +1299,10 @@ local function Stam_EnsureMod()
     local m = Stam_GetMod()
     if m then
         Stam.mod = m
-        Stam.saved = {MaxStamina=m.MaxStamina, SprintSpeed=m.SprintSpeed, StaminaGain=m.StaminaGain, StaminaDrain=m.StaminaDrain, StaminaRegenDelay=m.StaminaRegenDelay, Stamina=m.Stamina}
+        Stam.saved = {
+            MaxStamina=m.MaxStamina, SprintSpeed=m.SprintSpeed, StaminaGain=m.StaminaGain,
+            StaminaDrain=m.StaminaDrain, StaminaRegenDelay=m.StaminaRegenDelay, Stamina=m.Stamina,
+        }
     end
     return m
 end
@@ -1225,10 +1327,16 @@ local function Stam_Start()
     Stam.running = true
     Stam_EnsureMod()
     Stam.thread = task.spawn(function()
-        while Stam.running do task.wait(0.1); Stam_Apply() end
+        while Stam.running do
+            task.wait(0.1)
+            Stam_Apply()
+        end
     end)
 end
-local function Stam_Stop() Stam.running = false; if Stam.thread then pcall(task.cancel, Stam.thread); Stam.thread = nil end end
+local function Stam_Stop()
+    Stam.running = false
+    if Stam.thread then pcall(task.cancel, Stam.thread); Stam.thread = nil end
+end
 local function Stam_Restore()
     if Stam.mod and Stam.saved then
         pcall(function()
@@ -1285,6 +1393,7 @@ local function ES_Clear(model)
     local h = ESP_HL[model]
     if h then pcall(function() h:Destroy() end); ESP_HL[model] = nil end
 end
+
 task.spawn(function()
     while true do
         task.wait(0.35)
@@ -1312,6 +1421,7 @@ task.spawn(function()
                 end
             end
         end
+        -- Objects / Items
         for _, obj in ipairs(Workspace:GetDescendants()) do
             if obj:IsA("BasePart") or obj:IsA("Model") then
                 local n = obj.Name
@@ -1352,19 +1462,27 @@ local function AM1_InZone(s, myRoot)
     if Settings.AM1_UseFacing then
         local boxCF = myRoot.CFrame * CFrame.new(0, 0, -Settings.AM1_FacingZ/2)
         local rel = boxCF:PointToObjectSpace(r.Position)
-        return math.abs(rel.X) <= Settings.AM1_FacingX/2 and math.abs(rel.Y) <= Settings.AM1_FacingY/2 and math.abs(rel.Z) <= Settings.AM1_FacingZ/2
+        return math.abs(rel.X) <= Settings.AM1_FacingX/2
+           and math.abs(rel.Y) <= Settings.AM1_FacingY/2
+           and math.abs(rel.Z) <= Settings.AM1_FacingZ/2
     end
     local dx = r.Position.X - myRoot.Position.X
     local dz = r.Position.Z - myRoot.Position.Z
     return math.sqrt(dx*dx + dz*dz) <= Settings.AM1_Range
 end
-local function AM1_Trigger()
-    for _, name in ipairs(AM1_Abilities) do FireAbilityBuf(name) end
+local function AM1_Trigger(useAll)
+    if not NetworkEvent then return end
+    if useAll then
+        for _, name in ipairs(AM1_Abilities) do FireAbilityBuf(name) end
+    else
+        for _, name in ipairs(AM1_Abilities) do FireAbilityBuf(name) end
+    end
 end
 local function AM1_Heartbeat()
     if not AM1.running or AM1.attacking then return end
     local char = LocalPlayer.Character
-    local myRoot = char and char:FindFirstChild("HumanoidRootPart"); if not myRoot then return end
+    local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
     local sf = GetSurvivorsFolder(); if not sf then return end
     local found, isGuest = false, false
     for _, s in ipairs(sf:GetChildren()) do
@@ -1380,24 +1498,28 @@ local function AM1_Heartbeat()
         local d = tonumber(Settings.AM1_M1Delay) or 0
         if isGuest and (tonumber(Settings.AM1_GuestDelay) or 0) > 0 then d = d + Settings.AM1_GuestDelay end
         if d > 0 then task.wait(d) end
-        if AM1.running then AM1_Trigger() end
-        task.wait(0.5); AM1.attacking = false
+        if AM1.running then AM1_Trigger(isGuest) end
+        task.wait(0.5)
+        AM1.attacking = false
     end)
 end
 local function AM1_Enable() if not AM1.running then AM1.running = true; AM1.conn = RunService.Heartbeat:Connect(AM1_Heartbeat) end end
 local function AM1_Disable() AM1.running = false; if AM1.conn then pcall(function() AM1.conn:Disconnect() end); AM1.conn = nil end; AM1.attacking = false end
 
 --═══════════════════════════════════════════════════════════════════
--- VEE
+-- VEE: Auto Trick / Skate Control / Custom Stats / Anti-Rebound / Unlimited Sk8
 --═══════════════════════════════════════════════════════════════════
 local VEE = { trickThread=nil, reboundInstalled=false, sk8Loop=nil }
+
 local function VEE_GetModule()
     local ok, m = pcall(function() return require(ReplicatedStorage.Assets.Survivors.Veeronica.Behavior) end)
     return ok and m or nil
 end
+
 local function VEE_Trick()
     if not UserInputService.TouchEnabled or UserInputService.MouseEnabled then
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game); task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+        task.wait(0.05)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
     else
         local main = PlayerGui:FindFirstChild("MainUI")
@@ -1410,6 +1532,7 @@ local function VEE_Trick()
         end
     end
 end
+
 local function VEE_StartTrick()
     if VEE.trickThread then pcall(task.cancel, VEE.trickThread) end
     VEE.trickThread = task.spawn(function()
@@ -1417,22 +1540,28 @@ local function VEE_StartTrick()
             task.wait()
             local char = LocalPlayer.Character
             if char and char.Name == "Veeronica" then
-                local main = PlayerGui:FindFirstChild("MainUI")
-                local hl = main and main:FindFirstChild("Highlight")
-                if hl and hl.Adornee == char then VEE_Trick(); task.wait(0.1) end
+                local hl = PlayerGui.MainUI and PlayerGui.MainUI:FindFirstChild("Highlight")
+                if hl and hl.Adornee == char then
+                    VEE_Trick(); task.wait(0.1)
+                end
             end
         end
     end)
 end
-local function VEE_StopTrick() if VEE.trickThread then pcall(task.cancel, VEE.trickThread); VEE.trickThread = nil end end
+local function VEE_StopTrick()
+    if VEE.trickThread then pcall(task.cancel, VEE.trickThread); VEE.trickThread = nil end
+end
+
 local function VEE_SetSkateControl(on)
-    local m = VEE_GetModule(); if not m then return end
+    local m = VEE_GetModule()
+    if not m then return end
     local v = on and 6.5 or 0.65
     m.Sk8TurnControl = v
     for _, g in pairs(getgc and getgc(true) or {}) do
         if type(g) == "table" and rawget(g, "Sk8TurnControl") then g.Sk8TurnControl = v end
     end
 end
+
 local function VEE_ApplyStats()
     local m = VEE_GetModule(); if not m then return end
     local function set(k, v) if m[k] ~= nil then m[k] = v end end
@@ -1450,6 +1579,7 @@ local function VEE_ApplyStats()
         set("Sk8TrickCooldown", 1)
     end
 end
+
 local function VEE_StartRebound()
     if VEE.reboundInstalled or not hookmetamethod then return end
     VEE.reboundInstalled = true
@@ -1457,33 +1587,42 @@ local function VEE_StartRebound()
     old = hookmetamethod(game, "__namecall", function(self, ...)
         if getnamecallmethod() == "FireServer" and Settings.VEE_AntiRebound then
             local args = {...}
-            if self == NetworkEvent and type(args[1]) == "string" and args[1]:find("SkateRebound") then return end
+            if self == NetworkEvent and type(args[1]) == "string" and args[1]:find("SkateRebound") then
+                return
+            end
         end
         return old(self, ...)
     end)
 end
+
 local function VEE_StartUnlimitedSk8()
     if VEE.sk8Loop then return end
     VEE.sk8Loop = task.spawn(function()
         while Settings.VEE_UnlimitedSk8 do
             task.wait(0.1)
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if hrp and hrp:FindFirstChild("SkatePointer") and Stam.mod then
-                pcall(function() Stam.mod.Stamina = Stam.mod.MaxStamina end)
+            if Settings.VEE_UnlimitedSk8 then
+                local sm = pcall(function() return require(ReplicatedStorage.Systems.Character.Game.Sprinting) end)
+                if sm and Stam.mod then
+                    local char = LocalPlayer.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp and hrp:FindFirstChild("SkatePointer") then
+                        pcall(function() Stam.mod.Stamina = Stam.mod.MaxStamina end)
+                    end
+                end
             end
         end
     end)
 end
 
 --═══════════════════════════════════════════════════════════════════
--- GUEST
+-- GUEST: Charge Aim / Charge Control
 --═══════════════════════════════════════════════════════════════════
 local GuestCharge = { conn = nil }
 local function GuestCharge_Loop()
     while Settings.Guest_ChargeAim or Settings.Guest_ChargeControl do
         RunService.RenderStepped:Wait()
-        local char = LocalPlayer.Character; if not char then continue end
+        local char = LocalPlayer.Character
+        if not char then continue end
         local hum = char:FindFirstChildOfClass("Humanoid")
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hum or not hrp then continue end
@@ -1512,10 +1651,14 @@ local function GuestCharge_Loop()
         end
     end
 end
-local function GuestCharge_Start() if not GuestCharge.conn then GuestCharge.conn = task.spawn(GuestCharge_Loop) end end
+local function GuestCharge_Start()
+    if not GuestCharge.conn then
+        GuestCharge.conn = task.spawn(GuestCharge_Loop)
+    end
+end
 
 --═══════════════════════════════════════════════════════════════════
--- SHEDLETSKY
+-- SHEDLETSKY: Auto Slash
 --═══════════════════════════════════════════════════════════════════
 local Shed = { running=false, loop=nil, lastSlash=0 }
 local function Shed_Loop()
@@ -1526,8 +1669,7 @@ local function Shed_Loop()
         local hrp = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not hrp or not hum or hum.Health <= 0 then continue end
-        local main = PlayerGui:FindFirstChild("MainUI")
-        local slashBtn = main and main:FindFirstChild("AbilityContainer") and main.AbilityContainer:FindFirstChild("Slash")
+        local slashBtn = PlayerGui.MainUI and PlayerGui.MainUI:FindFirstChild("AbilityContainer") and PlayerGui.MainUI.AbilityContainer:FindFirstChild("Slash")
         local cd = slashBtn and slashBtn:FindFirstChild("CooldownTime")
         if cd and cd.Text ~= "" then continue end
         if tick() - Shed.lastSlash < Settings.Shed_SlashDelay then continue end
@@ -1556,9 +1698,9 @@ local function Shed_Enable() if not Shed.running then Shed.running = true; Shed.
 local function Shed_Disable() Shed.running = false; if Shed.loop then pcall(task.cancel, Shed.loop); Shed.loop = nil end end
 
 --═══════════════════════════════════════════════════════════════════
--- CHANCE
+-- CHANCE: Auto CoinFlip / Shoot Helper
 --═══════════════════════════════════════════════════════════════════
-local Chance = { coinLoop=nil, shootInstalled=false }
+local Chance = { coinLoop=nil, shootConn=nil, shootInstalled=false }
 local function Chance_StartCoin()
     if Chance.coinLoop then return end
     Chance.coinLoop = task.spawn(function()
@@ -1566,15 +1708,18 @@ local function Chance_StartCoin()
             task.wait(1.85)
             local char = LocalPlayer.Character
             if char and char.Name == "Chance" then
-                local main = PlayerGui:FindFirstChild("MainUI")
-                local shoot = main and main:FindFirstChild("AbilityContainer") and main.AbilityContainer:FindFirstChild("Shoot")
+                local shoot = PlayerGui.MainUI and PlayerGui.MainUI:FindFirstChild("AbilityContainer") and PlayerGui.MainUI.AbilityContainer:FindFirstChild("Shoot")
                 local charges = shoot and shoot:FindFirstChild("Charges")
-                if charges and charges.Text ~= "3" then FireAbilityBuf("CoinFlip") end
+                if charges and charges.Text ~= "3" then
+                    FireAbilityBuf("CoinFlip")
+                end
             end
         end
     end)
 end
-local function Chance_StopCoin() if Chance.coinLoop then pcall(task.cancel, Chance.coinLoop); Chance.coinLoop = nil end end
+local function Chance_StopCoin()
+    if Chance.coinLoop then pcall(task.cancel, Chance.coinLoop); Chance.coinLoop = nil end
+end
 local function Chance_InstallShoot()
     if Chance.shootInstalled or not NetworkEvent or not hookmetamethod then return end
     Chance.shootInstalled = true
@@ -1584,22 +1729,24 @@ local function Chance_InstallShoot()
             local args = {...}
             if type(args[1]) == "string" and args[1]:find("ChanceFireShot") then
                 local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local kf = GetKillersFolder()
-                    if kf then
-                        local best, bd = nil, 90
-                        for _, k in ipairs(kf:GetChildren()) do
-                            local kr = k:FindFirstChild("HumanoidRootPart")
-                            if kr then
-                                local d = (kr.Position - hrp.Position).Magnitude
-                                if d < bd then best, bd = kr, d end
+                if char then
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local kf = GetKillersFolder()
+                        if kf then
+                            local best, bd = nil, 90
+                            for _, k in ipairs(kf:GetChildren()) do
+                                local kr = k:FindFirstChild("HumanoidRootPart")
+                                if kr then
+                                    local d = (kr.Position - hrp.Position).Magnitude
+                                    if d < bd then best, bd = kr, d end
+                                end
                             end
-                        end
-                        if best then
-                            local dir = best.Position - hrp.Position
-                            NetworkEvent:FireServer(args[1], { Vector3.new(dir.X, dir.Y, dir.Z) })
-                            return
+                            if best then
+                                local dir = best.Position - hrp.Position
+                                NetworkEvent:FireServer(args[1], { Vector3.new(dir.X, dir.Y, dir.Z) })
+                                return
+                            end
                         end
                     end
                 end
@@ -1610,9 +1757,15 @@ local function Chance_InstallShoot()
 end
 
 --═══════════════════════════════════════════════════════════════════
--- ELLIOT
+-- JANE DOE: Crystal/Hatchet Aim
 --═══════════════════════════════════════════════════════════════════
-local Elliot = { loop=nil }
+local Jane = { crystalLoop=nil, hatchetConn=nil }
+
+--═══════════════════════════════════════════════════════════════════
+-- ELLIOT: Pizza Aimbot
+--═══════════════════════════════════════════════════════════════════
+local Elliot = { loop=nil, target=nil }
+
 local function Elliot_FindTarget(myHRP)
     local sf = GetSurvivorsFolder(); if not sf then return nil end
     local best, bestScore = nil, math.huge
@@ -1631,6 +1784,7 @@ local function Elliot_FindTarget(myHRP)
     end
     return best
 end
+
 local function Elliot_Start()
     if Elliot.loop then return end
     Elliot.loop = task.spawn(function()
@@ -1638,9 +1792,12 @@ local function Elliot_Start()
             RunService.RenderStepped:Wait()
             local char = LocalPlayer.Character
             if not char or char.Name ~= "Elliot" then continue end
-            local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then continue end
-            local t = Elliot_FindTarget(hrp); if not t then continue end
-            local dist = (t.Position - hrp.Position).Magnitude
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+            local t = Elliot_FindTarget(hrp)
+            if not t then continue end
+            local dir = t.Position - hrp.Position
+            local dist = dir.Magnitude
             local speed = Settings.Elliot_PizzaSpeed
             local flightTime = dist / speed
             local grav = Workspace.Gravity or 196.2
@@ -1650,10 +1807,12 @@ local function Elliot_Start()
         end
     end)
 end
-local function Elliot_Stop() if Elliot.loop then pcall(task.cancel, Elliot.loop); Elliot.loop = nil end end
+local function Elliot_Stop()
+    if Elliot.loop then pcall(task.cancel, Elliot.loop); Elliot.loop = nil end
+end
 
 --═══════════════════════════════════════════════════════════════════
--- TWO TIME
+-- TWO TIME: Auto Backstab
 --═══════════════════════════════════════════════════════════════════
 local TT = { running=false, loop=nil, lastStab=0 }
 local function TT_Start()
@@ -1697,12 +1856,16 @@ local function TT_Start()
         end
     end)
 end
-local function TT_Stop() TT.running = false; if TT.loop then pcall(task.cancel, TT.loop); TT.loop = nil end end
+local function TT_Stop()
+    TT.running = false
+    if TT.loop then pcall(task.cancel, TT.loop); TT.loop = nil end
+end
 
 --═══════════════════════════════════════════════════════════════════
--- 007N7
+-- 007N7: BodyBlock + LMS
 --═══════════════════════════════════════════════════════════════════
-local N007 = { loop=nil }
+local N007 = { loop=nil, lmsConn=nil, invisConn=nil }
+
 local function N007_GetTarget()
     if Settings.N007_BB_Target == "Killer" then
         local kf = GetKillersFolder(); return kf and kf:GetChildren()[1]
@@ -1724,6 +1887,7 @@ local function N007_GetTarget()
         return best
     end
 end
+
 local function N007_Start()
     if N007.loop then return end
     N007.loop = task.spawn(function()
@@ -1731,7 +1895,8 @@ local function N007_Start()
             RunService.Heartbeat:Wait()
             local char = LocalPlayer.Character
             if not char or char.Name ~= "007n7" then continue end
-            local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then continue end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
             local t = N007_GetTarget(); if not t then continue end
             local tr = t:FindFirstChild("HumanoidRootPart"); if not tr then continue end
             local pred = tr.Position + (tr.AssemblyLinearVelocity or Vector3.new()) * (Settings.N007_BB_Prediction / 100)
@@ -1743,9 +1908,10 @@ local function N007_Start()
 end
 
 --═══════════════════════════════════════════════════════════════════
--- NOLI
+-- NOLI: Rush Control + Auto Target + Anti Crash
 --═══════════════════════════════════════════════════════════════════
-local Noli = { bind = "C00L_NoliRush", installed=false }
+local Noli = { bind = "Noli_Rush", installed=false }
+
 local function Noli_Loop()
     if not Settings.Noli_RushControl and not Settings.Noli_AutoTarget then return end
     local char = LocalPlayer.Character
@@ -1760,12 +1926,14 @@ local function Noli_Loop()
         local dir = cam.CFrame.LookVector
         local flat = Vector3.new(dir.X, 0, dir.Z)
         if flat.Magnitude > 0.05 then
-            hrp.AssemblyLinearVelocity = Vector3.new(flat.Unit.X * Settings.Noli_DashSpeed, hrp.AssemblyLinearVelocity.Y, flat.Unit.Z * Settings.Noli_DashSpeed)
+            local vel = Vector3.new(flat.Unit.X * Settings.Noli_DashSpeed, hrp.AssemblyLinearVelocity.Y, flat.Unit.Z * Settings.Noli_DashSpeed)
+            hrp.AssemblyLinearVelocity = vel
             hum:Move(flat.Unit)
         end
     end
     if Settings.Noli_AutoTarget then
-        local kf = GetKillersFolder(); if not kf then return end
+        local kf = GetKillersFolder()
+        if not kf then return end
         local best, bd = nil, math.huge
         for _, k in ipairs(kf:GetChildren()) do
             local kr = k:FindFirstChild("HumanoidRootPart")
@@ -1780,6 +1948,7 @@ local function Noli_Loop()
         end
     end
 end
+
 local function Noli_Enable()
     if Noli.installed then return end
     Noli.installed = true
@@ -1787,35 +1956,60 @@ local function Noli_Enable()
 end
 
 --═══════════════════════════════════════════════════════════════════
--- NOSFERATU
+-- NOSFERATU: Fly Control / Dive Control / Cataclysm Control
 --═══════════════════════════════════════════════════════════════════
+local Nos = { installed=false }
+
 local function Nos_Apply()
     pcall(function()
         local cfg = require(ReplicatedStorage.Assets.Killers.Nosferatu.Config)
         if not cfg then return end
-        if cfg.AscentFlight then cfg.AscentFlight.Duration = Settings.Nos_FlyControl and 999999 or 10 end
-        if cfg.AscentBite then cfg.AscentBite.TurnSpeed = Settings.Nos_DiveControl and 999999 or 4 end
-        if cfg.Ascent then cfg.Ascent.CanTurn = Settings.Nos_DiveControl end
-        if cfg.Spire then cfg.Spire.TurnControl = Settings.Nos_CataclysmControl and 999999 or 10 end
+        if cfg.AscentFlight then
+            if Settings.Nos_FlyControl then cfg.AscentFlight.Duration = 999999
+            else cfg.AscentFlight.Duration = 10 end
+        end
+        if cfg.AscentBite then
+            if Settings.Nos_DiveControl then cfg.AscentBite.TurnSpeed = 999999
+            else cfg.AscentBite.TurnSpeed = 4 end
+        end
+        if cfg.Ascent then
+            if Settings.Nos_DiveControl then cfg.Ascent.CanTurn = true
+            else cfg.Ascent.CanTurn = false end
+        end
+        if cfg.Spire then
+            if Settings.Nos_CataclysmControl then cfg.Spire.TurnControl = 999999
+            else cfg.Spire.TurnControl = 10 end
+        end
     end)
 end
 
 --═══════════════════════════════════════════════════════════════════
--- SLASHER
+-- C00LKIDD: Override Control / Custom Speed
 --═══════════════════════════════════════════════════════════════════
+local Cool = { installed=false }
+
+--═══════════════════════════════════════════════════════════════════
+-- SLASHER: Custom Raging Pace Speed
+--═══════════════════════════════════════════════════════════════════
+local Slash = { installed=false }
+
 local function Slash_Apply()
     pcall(function()
-        for _, g in pairs(getgc and getgc(true) or {}) do
-            if type(g) == "table" and rawget(g, "EnragedSpeed") then
-                local base = rawget(g, "Speed") or 16
-                g.EnragedSpeed = Settings.Slash_CustomRage and (base * Settings.Slash_RageMult) or base
+        local mod = require(ReplicatedStorage.Assets.Killers.Slasher.Behavior)
+        if mod.Abilities and mod.Abilities.RagingPace and mod.Abilities.RagingPace.Callback then
+            -- Use getgc to find the EnragedSpeed value
+            for _, g in pairs(getgc and getgc(true) or {}) do
+                if type(g) == "table" and rawget(g, "EnragedSpeed") then
+                    local base = rawget(g, "Speed") or 16
+                    g.EnragedSpeed = Settings.Slash_CustomRage and (base * Settings.Slash_RageMult) or base
+                end
             end
         end
     end)
 end
 
 --═══════════════════════════════════════════════════════════════════
--- GENERATOR SOLVER
+-- GENERATOR SOLVER (unchanged from v2.2)
 --═══════════════════════════════════════════════════════════════════
 local GS = { installed=false, generation=0, lockBoard=nil }
 local GSM = {}
@@ -1989,133 +2183,75 @@ local function GS_Disable() Settings.GS_Enabled = false; GS.generation += 1 end
 --═══════════════════════════════════════════════════════════════════
 _G.C00lsaken = {
     Settings = Settings,
-    AutoBlock = { Enable = AB_Enable, Disable = AB_Disable },
-    AntiBait  = { Enable = ABT_Enable, Disable = ABT_Disable },
-    PunchAim  = { Enable = PA_Enable, Disable = PA_Disable },
-    HDT       = { Enable = HDT_Enable, Disable = HDT_Disable, SetSpeed = HDT_SetSpeed, SetDuration = HDT_SetDuration, SetDelay = HDT_SetDelay },
-    SurvivorAim = { Enable = function() Settings.AIM_Enabled = true; Aim_SetupHook() end, Disable = function() Settings.AIM_Enabled = false end },
-    SilentAim = { Enable = SilentAim_Enable, Disable = SilentAim_Disable },
-    ManualAim = { Enable = MAimbot_Enable, Disable = MAimbot_Disable },
+    AutoBlock    = { Enable = AB_Enable, Disable = AB_Disable },
+    AntiBait     = { Enable = ABT_Enable, Disable = ABT_Disable },
+    PunchAim     = { Enable = PA_Enable, Disable = PA_Disable },
+    HDT          = { Enable = HDT_Enable, Disable = HDT_Disable, SetSpeed = HDT_SetSpeed, SetDuration = HDT_SetDuration, SetDelay = HDT_SetDelay },
+    SurvivorAim  = { Enable = function() Settings.AIM_Enabled = true; Aim_SetupHook() end, Disable = function() Settings.AIM_Enabled = false end },
+    SilentAim    = { Enable = SilentAim_Enable, Disable = SilentAim_Disable },
+    ManualAim    = { Enable = MAimbot_Enable, Disable = MAimbot_Disable },
     HitboxExpander = { Enable = HBE_Enable, Disable = HBE_Disable },
-    AntiDebuff = { Set = AntiDebuff_Set },
-    Stamina = { SetInfinite = Stam_SetInfinite, Restore = Stam_Restore, Apply = Stam_Apply },
-    AutoM1 = { Enable = AM1_Enable, Disable = AM1_Disable },
-    Generator = { Enable = GS_Enable, Disable = GS_Disable },
-    VEE = { StartTrick = VEE_StartTrick, StopTrick = VEE_StopTrick, SetSkateControl = VEE_SetSkateControl, ApplyStats = VEE_ApplyStats },
-    GuestCharge = { Start = GuestCharge_Start },
-    Shed = { Enable = Shed_Enable, Disable = Shed_Disable },
-    Chance = { StartCoin = Chance_StartCoin, StopCoin = Chance_StopCoin, InstallShoot = Chance_InstallShoot },
-    Elliot = { Start = Elliot_Start, Stop = Elliot_Stop },
-    TwoTime = { Start = TT_Start, Stop = TT_Stop },
-    N007 = { StartBodyBlock = N007_Start },
-    Noli = { Enable = Noli_Enable },
-    Nosferatu = { Apply = Nos_Apply },
-    Slasher = { Apply = Slash_Apply },
-    ESP = { Refresh = ES_Refresh },
+    AntiDebuff   = { Set = AntiDebuff_Set },
+    Stamina      = { SetInfinite = Stam_SetInfinite, Restore = Stam_Restore, Apply = Stam_Apply },
+    AutoM1       = { Enable = AM1_Enable, Disable = AM1_Disable },
+    Generator    = { Enable = GS_Enable, Disable = GS_Disable },
+    VEE          = { StartTrick = VEE_StartTrick, StopTrick = VEE_StopTrick, SetSkateControl = VEE_SetSkateControl, ApplyStats = VEE_ApplyStats },
+    GuestCharge  = { Start = GuestCharge_Start },
+    Shed         = { Enable = Shed_Enable, Disable = Shed_Disable },
+    Chance       = { StartCoin = Chance_StartCoin, StopCoin = Chance_StopCoin, InstallShoot = Chance_InstallShoot },
+    Elliot       = { Start = Elliot_Start, Stop = Elliot_Stop },
+    TwoTime      = { Start = TT_Start, Stop = TT_Stop },
+    N007         = { StartBodyBlock = N007_Start },
+    Noli         = { Enable = Noli_Enable },
+    Nosferatu    = { Apply = Nos_Apply },
+    Slasher      = { Apply = Slash_Apply },
+    ESP          = { Refresh = ES_Refresh },
 }
 
 --═══════════════════════════════════════════════════════════════════
--- UI — MINI5 (Cursedsaken native — RED theme forced)
+-- MINI5 UI — C00LSAKEN (Red / Cursed theme)
 --═══════════════════════════════════════════════════════════════════
-print("[C00lsaken] Loading Cursedsaken UI (Mini5)...")
-
-local Mini5URL = "https://raw.githubusercontent.com/zxcursedsocute/UI-Library/refs/heads/main/Mini5"
-local okLoad, Mini5 = pcall(function()
-    return loadstring(game:HttpGet(Mini5URL))()
-end)
-
-if not okLoad or type(Mini5) ~= "table" or not Mini5.CreateWindow then
-    warn("[C00lsaken] Mini5 failed to load! Reason:", tostring(Mini5))
-    warn("Game logic is still active — use _G.C00lsaken.* to toggle features.")
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "C00lsaken",
-            Text = "Mini5 UI failed. Use _G.C00lsaken API. Check console.",
-            Duration = 10,
-        })
-    end)
-    return
-end
-
--- Try red themes in order; first that works wins
-local WINDOW_BASE = {
+-- Mini5's current public source has a mobile-case typo (KW.touchEnabled).
+-- Patch the downloaded library text before compiling it, without changing its UI API.
+local MINI5_URL = "https://raw.githubusercontent.com/zxcursedsocute/UI-Library/refs/heads/main/Mini5"
+local Mini5Source = game:HttpGet(MINI5_URL)
+assert(type(Mini5Source) == "string" and #Mini5Source > 1000, "C00lsaken: Mini5 library download failed")
+Mini5Source = Mini5Source:gsub("KW%.touchEnabled", "KW.TouchEnabled")
+local Mini5Loader = assert(loadstring(Mini5Source), "C00lsaken: Mini5 library compile failed")
+local Mini5 = Mini5Loader()
+assert(type(Mini5) == "table" and type(Mini5.CreateWindow) == "function", "C00lsaken: Mini5 API unavailable")
+local Window = Mini5.CreateWindow({
     Name = "C00lsaken",
     Description = "by c00lkid & AI",
     Size = 620,
-    Version = "v3.3",
-}
-local RED_THEMES = { "Rose", "Blood", "Ruby", "Crimson", "Ember", "Red", "Magma", "Volcano", "Dark" }
-local Window
-local activeTheme = "default"
+    Version = "v3.0",
+    Theme = "Cursed",
+})
 
-for _, themeName in ipairs(RED_THEMES) do
-    local ok, result = pcall(function()
-        local cfg = {}
-        for k, v in pairs(WINDOW_BASE) do cfg[k] = v end
-        cfg.Theme = themeName
-        return Mini5.CreateWindow(cfg)
-    end)
-    if ok and result then
-        Window = result
-        activeTheme = themeName
-        print("[C00lsaken] Theme applied:", themeName)
-        break
-    end
-end
-
-if not Window then
-    print("[C00lsaken] All named themes failed — creating with no theme")
-    Window = Mini5.CreateWindow(WINDOW_BASE)
-end
-
--- Force accent color to red if the library exposes a setter
-local RED_ACCENT = Color3.fromRGB(220, 30, 40)
-pcall(function()
-    if Mini5.SetAccent then Mini5.SetAccent(RED_ACCENT) end
-    if Mini5.SetAccentColor then Mini5.SetAccentColor(RED_ACCENT) end
-    if Window.SetAccent then Window:SetAccent(RED_ACCENT) end
-    if Window.SetAccentColor then Window:SetAccentColor(RED_ACCENT) end
-    if Window.AccentColor ~= nil then Window.AccentColor = RED_ACCENT end
-    if Window.Accent ~= nil then Window.Accent = RED_ACCENT end
-end)
-print("[C00lsaken] Active theme:", activeTheme)
-
-local I_TEXT = "Text"
-local I_RUN  = "Run"
-local I_VIS  = "Visual"
-local I_GEN  = "Generator"
-local I_BOX  = "box"
-local I_SURV = "Survivor"
-local I_KILL = "Killer"
-
-local function notify(title, desc)
-    pcall(function()
-        Window:Notification({ Name = title, Description = desc, Duration = 3 })
-    end)
-end
-
-local HomeCat   = Window:AddCategory("Home")
-local MainCat   = Window:AddCategory("Main")
-local SurvCat   = Window:AddCategory("Survivor")
-local KillCat   = Window:AddCategory("Killer")
-local CombatCat = Window:AddCategory("Combat")
-local VisualCat = Window:AddCategory("Visual")
-
--- Info
-local InfoTab = HomeCat:AddTab("Info", I_TEXT)
+--═══════════════════════════════════════════════════════════════════
+-- HOME / INFO
+--═══════════════════════════════════════════════════════════════════
+local HomeCat = Window:AddCategory("Home")
+local InfoTab = HomeCat:AddTab("Info", "info")
 InfoTab:AddSection("C00lsaken")
-InfoTab:AddParagraph("C00lsaken v3.3", "Merged build — Auto Block + Silent Aim + Hitbox Expander + per-character exploits")
-InfoTab:AddParagraph("Toggle UI", "RightControl")
+InfoTab:AddSection("Merged build | v3.0")
+InfoTab:AddSection("C00lsaken core + Silent Aim + Hitbox Expander + character features")
+InfoTab:AddSection("Mini5 Cursed theme | Toggle: RightControl")
 
--- Auto Block
-local ABTab = CombatCat:AddTab("Auto Block", I_BOX)
+--═══════════════════════════════════════════════════════════════════
+-- COMBAT
+--═══════════════════════════════════════════════════════════════════
+local CombatCat = Window:AddCategory("Combat")
+
+local ABTab = CombatCat:AddTab("Auto Block", "shield")
 ABTab:AddSection("Auto Block")
 ABTab:AddToggle({ Name = "Enable Auto Block", Default = false, Callback = function(v) if v then AB_Enable() else AB_Disable() end end })
-ABTab:AddDropdown({ Name = "Block Ability", Options = {"Guest1337", "007n7"}, Default = "Guest1337", Callback = function(v) Settings.AB_Mode = v end })
+ABTab:AddDropdown({ Name = "Block Ability", Options = { "Guest1337", "007n7" }, Default = "Guest1337", Callback = function(v) Settings.AB_Mode = v end })
 ABTab:AddToggle({ Name = "Show Zone Visual", Default = true, Callback = function(v) Settings.AB_ShowZone = v end })
-ABTab:AddSlider({ Name = "Pending Window", Min = 0.1, Max = 1, Default = 0.25, Decimals = 2, Callback = function(v) Settings.AB_PendingWindow = v end })
+ABTab:AddSlider({ Name = "Pending Window (s)", Min = 0.1, Max = 1, Default = 0.25, Decimals = 2, Callback = function(v) Settings.AB_PendingWindow = v end })
+
 ABTab:AddSection("Facing Zone")
-ABTab:AddDropdown({ Name = "Zone Type", Options = {"Circle", "Dot", "Diamond", "Box"}, Default = "Circle", Callback = function(v) Settings.AB_FacingMode = v end })
+ABTab:AddDropdown({ Name = "Zone Type", Options = { "Circle", "Dot", "Diamond", "Box" }, Default = "Circle", Callback = function(v) Settings.AB_FacingMode = v end })
 ABTab:AddSlider({ Name = "Circle Radius", Min = 2, Max = 30, Default = 8, Callback = function(v) Settings.AB_CircleRadius = v end })
 ABTab:AddSlider({ Name = "Dot Radius", Min = 1, Max = 20, Default = 5, Callback = function(v) Settings.AB_DotRadius = v end })
 ABTab:AddSlider({ Name = "Dot Distance", Min = 0, Max = 20, Default = 4, Callback = function(v) Settings.AB_DotDistance = v end })
@@ -2123,118 +2259,92 @@ ABTab:AddSlider({ Name = "Diamond Length", Min = 2, Max = 30, Default = 8, Callb
 ABTab:AddSlider({ Name = "Diamond Width", Min = 1, Max = 20, Default = 4, Callback = function(v) Settings.AB_DiamondWidth = v end })
 ABTab:AddSlider({ Name = "Diamond Offset", Min = 0, Max = 20, Default = 3, Callback = function(v) Settings.AB_DiamondOffset = v end })
 
--- HDT
-local HDTab = CombatCat:AddTab("HDT", I_RUN)
-HDTab:AddSection("Hitbox Dragging Tech")
-HDTab:AddToggle({ Name = "Enable HDT", Default = false, Callback = function(v) if v then HDT_Enable() else HDT_Disable() end end })
-HDTab:AddSlider({ Name = "Speed", Min = 5, Max = 500, Default = 40, Callback = function(v) HDT_SetSpeed(v) end })
-HDTab:AddSlider({ Name = "Delay", Min = 0, Max = 2, Default = 0.05, Decimals = 3, Callback = function(v) HDT_SetDelay(v) end })
-HDTab:AddSlider({ Name = "Duration", Min = 0.05, Max = 3, Default = 0.6, Decimals = 2, Callback = function(v) HDT_SetDuration(v) end })
-HDTab:AddToggle({ Name = "Debug Print", Default = false, Callback = function(v) HDT.Debug = v end })
-HDTab:AddSection("Anti Bait")
-HDTab:AddToggle({ Name = "Enable Anti Bait", Default = false, Callback = function(v) if v then ABT_Enable() else ABT_Disable() end end })
-HDTab:AddSlider({ Name = "Duration", Min = 0, Max = 3, Default = 0.5, Decimals = 1, Callback = function(v) Settings.ABT_Duration = v end })
-HDTab:AddSection("Punch Aim")
-HDTab:AddToggle({ Name = "Enable Punch Aim", Default = false, Callback = function(v) if v then PA_Enable() else PA_Disable() end end })
-HDTab:AddSlider({ Name = "Prediction", Min = 0, Max = 20, Default = 4, Callback = function(v) Settings.PA_Prediction = v end })
+local HDTAB = CombatCat:AddTab("HDT", "cpu")
+HDTAB:AddSection("Hitbox Dragging Tech")
+HDTAB:AddToggle({ Name = "Enable HDT", Default = false, Callback = function(v) if v then HDT_Enable() else HDT_Disable() end end })
+HDTAB:AddSlider({ Name = "Speed", Min = 5, Max = 500, Default = 40, Callback = function(v) HDT_SetSpeed(v) end })
+HDTAB:AddSlider({ Name = "Delay", Min = 0, Max = 2, Default = 0.05, Decimals = 3, Callback = function(v) HDT_SetDelay(v) end })
+HDTAB:AddSlider({ Name = "Duration", Min = 0.05, Max = 3, Default = 0.6, Decimals = 2, Callback = function(v) HDT_SetDuration(v) end })
+HDTAB:AddToggle({ Name = "Debug (print)", Default = false, Callback = function(v) HDT.Debug = v end })
 
--- Auto M1
-local AM1Tab = CombatCat:AddTab("Auto M1", I_KILL)
+HDTAB:AddSection("Anti Bait (drag)")
+HDTAB:AddToggle({ Name = "Enable Anti Bait", Default = false, Callback = function(v) if v then ABT_Enable() else ABT_Disable() end end })
+HDTAB:AddSlider({ Name = "Duration", Min = 0, Max = 3, Default = 0.5, Decimals = 1, Callback = function(v) Settings.ABT_Duration = v end })
+
+HDTAB:AddSection("Punch Aim")
+HDTAB:AddToggle({ Name = "Enable Punch Aim", Default = false, Callback = function(v) if v then PA_Enable() else PA_Disable() end end })
+HDTAB:AddSlider({ Name = "Prediction", Min = 0, Max = 20, Default = 4, Callback = function(v) Settings.PA_Prediction = v end })
+
+local AM1Tab = CombatCat:AddTab("Auto M1 (Killer)", "crosshair")
 AM1Tab:AddSection("Killer M1")
 AM1Tab:AddToggle({ Name = "Enable Auto M1", Default = false, Callback = function(v) if v then AM1_Enable() else AM1_Disable() end end })
 AM1Tab:AddSlider({ Name = "Range", Min = 1, Max = 30, Default = 9, Callback = function(v) Settings.AM1_Range = v end })
-AM1Tab:AddSlider({ Name = "Guest Delay", Min = 0, Max = 2, Default = 0.2, Decimals = 2, Callback = function(v) Settings.AM1_GuestDelay = v end })
+AM1Tab:AddSlider({ Name = "Guest 1337 Delay", Min = 0, Max = 2, Default = 0.2, Decimals = 2, Callback = function(v) Settings.AM1_GuestDelay = v end })
 AM1Tab:AddSlider({ Name = "M1 Delay", Min = 0, Max = 1, Default = 0, Decimals = 2, Callback = function(v) Settings.AM1_M1Delay = v end })
 AM1Tab:AddToggle({ Name = "Use Facing Box", Default = false, Callback = function(v) Settings.AM1_UseFacing = v end })
 AM1Tab:AddSlider({ Name = "Facing X", Min = 1, Max = 30, Default = 9, Callback = function(v) Settings.AM1_FacingX = v end })
 AM1Tab:AddSlider({ Name = "Facing Y", Min = 1, Max = 30, Default = 10, Callback = function(v) Settings.AM1_FacingY = v end })
 AM1Tab:AddSlider({ Name = "Facing Z", Min = 1, Max = 30, Default = 9, Callback = function(v) Settings.AM1_FacingZ = v end })
 
--- Silent Aim
-local SITab = CombatCat:AddTab("Silent Aim", I_KILL)
-SITab:AddSection("Silent Aim")
-SITab:AddToggle({ Name = "Enable Silent Aim", Default = false, Callback = function(v) if v then SilentAim_Enable() else SilentAim_Disable() end end })
-SITab:AddSlider({ Name = "FOV", Min = 50, Max = 800, Default = 150, Callback = function(v) Settings.SA_FOV = v end })
-SITab:AddToggle({ Name = "Wall Check", Default = false, Callback = function(v) Settings.SA_WallCheck = v end })
-SITab:AddSlider({ Name = "Prediction", Min = 0, Max = 1, Default = 0.15, Decimals = 2, Callback = function(v) Settings.SA_Prediction = v end })
+--═══════════════════════════════════════════════════════════════════
+-- SURVIVOR
+--═══════════════════════════════════════════════════════════════════
+local SurvCat = Window:AddCategory("Survivor")
 
--- Manual Aim
-local MATab = CombatCat:AddTab("Manual Aim", I_KILL)
-MATab:AddSection("Manual Aimbot")
-MATab:AddToggle({ Name = "Enable Manual Aim", Default = false, Callback = function(v) if v then MAimbot_Enable() else MAimbot_Disable() end end })
-MATab:AddDropdown({ Name = "Method", Options = {"Camera", "HRP", "Both"}, Default = "Both", Callback = function(v) Settings.MA_Method = v end })
-MATab:AddDropdown({ Name = "Target", Options = {"Auto", "Killers", "Survivors"}, Default = "Auto", Callback = function(v) Settings.MA_Target = v end })
-MATab:AddSlider({ Name = "Distance", Min = 5, Max = 500, Default = 20, Callback = function(v) Settings.MA_Distance = v end })
-MATab:AddSlider({ Name = "Prediction", Min = 0, Max = 2, Default = 0.1, Decimals = 2, Callback = function(v) Settings.MA_Prediction = v end })
-MATab:AddSlider({ Name = "Smoothness", Min = 1, Max = 100, Default = 35, Callback = function(v) Settings.MA_Smoothness = v end })
-MATab:AddToggle({ Name = "Ping Comp", Default = true, Callback = function(v) Settings.MA_PingComp = v end })
-
--- Hitbox Expander
-local HBETab = CombatCat:AddTab("Hitbox Exp", I_KILL)
-HBETab:AddSection("Hitbox Expander")
-HBETab:AddToggle({ Name = "Enable Hitbox Expander", Default = false, Callback = function(v) if v then HBE_Enable() else HBE_Disable() end end })
-HBETab:AddParagraph("Warning", "Uses AssemblyLinearVelocity during attack anims. Highest-risk feature. Use on alt.")
-
--- Survivor Auto Aim
-local SAimTab = SurvCat:AddTab("Auto Aim", I_SURV)
+local SAimTab = SurvCat:AddTab("Auto Aim", "swords")
 SAimTab:AddSection("Auto Aim")
 SAimTab:AddToggle({ Name = "Enable Auto Aim", Default = false, Callback = function(v) if v then Settings.AIM_Enabled = true; Aim_SetupHook() else Settings.AIM_Enabled = false end end })
-SAimTab:AddDropdown({ Name = "Aim Mode", Options = {"Character", "Camera", "Both"}, Default = "Character", Callback = function(v) Settings.AIM_Mode = v end })
+SAimTab:AddDropdown({ Name = "Aim Mode", Options = { "Character", "Camera", "Both" }, Default = "Character", Callback = function(v) Settings.AIM_Mode = v end })
 SAimTab:AddSlider({ Name = "Prediction (1-10)", Min = 1, Max = 10, Default = 4, Callback = function(v) Settings.AIM_Prediction = v end })
 SAimTab:AddSlider({ Name = "Lock Time", Min = 0.1, Max = 3, Default = 0.7, Decimals = 2, Callback = function(v) Settings.AIM_LockTime = v end })
 SAimTab:AddSlider({ Name = "Range", Min = 5, Max = 200, Default = 55, Callback = function(v) Settings.AIM_Range = v end })
+
 SAimTab:AddSection("Trigger Patterns")
 SAimTab:AddToggle({ Name = "Shedletsky - Slash", Default = true, Callback = function(v) Settings.AIM_OnSlash = v end })
 SAimTab:AddToggle({ Name = "Guest - Block/Parry/Punch", Default = true, Callback = function(v) Settings.AIM_OnBlock = v end })
-SAimTab:AddToggle({ Name = "Two Time - Dagger", Default = true, Callback = function(v) Settings.AIM_OnDagger = v end })
+SAimTab:AddToggle({ Name = "Two Time - Any Dagger", Default = true, Callback = function(v) Settings.AIM_OnDagger = v end })
 SAimTab:AddToggle({ Name = "Jane Doe - Hatchet", Default = true, Callback = function(v) Settings.AIM_OnAxe = v end })
 SAimTab:AddToggle({ Name = "Chance - Shoot/Gun", Default = true, Callback = function(v) Settings.AIM_OnShoot = v end })
 
--- Vee
-local VeeTab = SurvCat:AddTab("Veeronica", I_RUN)
-VeeTab:AddSection("Vee Movement")
+local VeeTab = SurvCat:AddTab("Veeronica", "zap")
+VeeTab:AddSection("Vee Features")
 VeeTab:AddToggle({ Name = "Auto Trick", Default = false, Callback = function(v) Settings.VEE_AutoTrick = v; if v then VEE_StartTrick() else VEE_StopTrick() end end })
 VeeTab:AddToggle({ Name = "Skate Control", Default = false, Callback = function(v) Settings.VEE_SkateControl = v; VEE_SetSkateControl(v) end })
 VeeTab:AddToggle({ Name = "Anti Rebound", Default = false, Callback = function(v) Settings.VEE_AntiRebound = v; if v then VEE_StartRebound() end end })
 VeeTab:AddToggle({ Name = "Unlimited Sk8", Default = false, Callback = function(v) Settings.VEE_UnlimitedSk8 = v; if v then VEE_StartUnlimitedSk8() end end })
-VeeTab:AddSection("Vee Custom Stats")
-VeeTab:AddToggle({ Name = "Enable Custom Stats", Default = false, Callback = function(v) Settings.VEE_CustomStats = v; VEE_ApplyStats() end })
+VeeTab:AddToggle({ Name = "Custom Stats", Default = false, Callback = function(v) Settings.VEE_CustomStats = v; VEE_ApplyStats() end })
 VeeTab:AddSlider({ Name = "Skate Speed", Min = 1, Max = 10, Default = 1.15, Decimals = 2, Callback = function(v) Settings.VEE_Speed = v; VEE_ApplyStats() end })
 VeeTab:AddSlider({ Name = "Trick Speed", Min = 1, Max = 15, Default = 1.42, Decimals = 2, Callback = function(v) Settings.VEE_TrickSpeed = v; VEE_ApplyStats() end })
 VeeTab:AddSlider({ Name = "Bump Power", Min = 10, Max = 150, Default = 11.9, Decimals = 1, Callback = function(v) Settings.VEE_BumpPower = v; VEE_ApplyStats() end })
 VeeTab:AddSlider({ Name = "Trick Cooldown", Min = 0, Max = 5, Default = 1, Decimals = 1, Callback = function(v) Settings.VEE_TrickCD = v; VEE_ApplyStats() end })
 
--- Guest
-local GuestTab = SurvCat:AddTab("Guest 1337", I_SURV)
+local GuestTab = SurvCat:AddTab("Guest 1337", "user")
 GuestTab:AddSection("Charge")
 GuestTab:AddToggle({ Name = "Charge Aim", Default = false, Callback = function(v) Settings.Guest_ChargeAim = v; if v then GuestCharge_Start() end end })
 GuestTab:AddToggle({ Name = "Charge Control", Default = false, Callback = function(v) Settings.Guest_ChargeControl = v; if v then GuestCharge_Start() end end })
 
--- Shedletsky
-local ShedTab = SurvCat:AddTab("Shedletsky", I_SURV)
+local ShedTab = SurvCat:AddTab("Shedletsky", "sword")
 ShedTab:AddSection("Auto Slash")
 ShedTab:AddToggle({ Name = "Enable Auto Slash", Default = false, Callback = function(v) if v then Shed_Enable() else Shed_Disable() end end })
 ShedTab:AddSlider({ Name = "Delay", Min = 0, Max = 3, Default = 0.1, Decimals = 2, Callback = function(v) Settings.Shed_SlashDelay = v end })
 ShedTab:AddSlider({ Name = "Distance", Min = 1, Max = 30, Default = 10, Callback = function(v) Settings.Shed_SlashDist = v end })
 ShedTab:AddToggle({ Name = "TP Behind", Default = false, Callback = function(v) Settings.Shed_TPBehind = v end })
-ShedTab:AddSlider({ Name = "TP Distance", Min = 1, Max = 10, Default = 3.5, Decimals = 1, Callback = function(v) Settings.Shed_TPDist = v end })
+ShedTab:AddSlider({ Name = "TP Behind Distance", Min = 1, Max = 10, Default = 3.5, Decimals = 1, Callback = function(v) Settings.Shed_TPDist = v end })
 
--- Chance
-local ChanceTab = SurvCat:AddTab("Chance", I_SURV)
-ChanceTab:AddSection("Chance")
-ChanceTab:AddToggle({ Name = "Auto Coin Flip", Default = false, Callback = function(v) Settings.Chance_AutoCoin = v; if v then Chance_StartCoin() else Chance_StopCoin() end end })
+local ChanceTab = SurvCat:AddTab("Chance", "dice-5")
+ChanceTab:AddSection("Auto Coin Flip")
+ChanceTab:AddToggle({ Name = "Enable Auto Coin Flip", Default = false, Callback = function(v) Settings.Chance_AutoCoin = v; if v then Chance_StartCoin() else Chance_StopCoin() end end })
+ChanceTab:AddSection("Shoot Helper")
 ChanceTab:AddToggle({ Name = "Shoot Aim Helper", Default = false, Callback = function(v) Settings.Chance_ShootHelper = v; if v then Chance_InstallShoot() end end })
 
--- Jane Doe
-local JaneTab = SurvCat:AddTab("Jane Doe", I_SURV)
-JaneTab:AddSection("Jane Doe")
+local JaneTab = SurvCat:AddTab("Jane Doe", "axe")
+JaneTab:AddSection("Crystal / Hatchet")
 JaneTab:AddToggle({ Name = "Crystal Aim", Default = false, Callback = function(v) Settings.Jane_CrystalAim = v end })
 JaneTab:AddToggle({ Name = "Hatchet Aim", Default = false, Callback = function(v) Settings.Jane_HatchetAim = v end })
 JaneTab:AddToggle({ Name = "Infinite Hold", Default = false, Callback = function(v) Settings.Jane_InfHold = v end })
 JaneTab:AddToggle({ Name = "Instant Max Charge", Default = false, Callback = function(v) Settings.Jane_MaxCharge = v end })
 
--- Elliot
-local ElliotTab = SurvCat:AddTab("Elliot", I_SURV)
+local ElliotTab = SurvCat:AddTab("Elliot", "pizza")
 ElliotTab:AddSection("Pizza Aimbot")
 ElliotTab:AddToggle({ Name = "Enable Pizza Aimbot", Default = false, Callback = function(v) Settings.Elliot_PizzaAim = v; if v then Elliot_Start() else Elliot_Stop() end end })
 ElliotTab:AddToggle({ Name = "Target Lowest HP", Default = false, Callback = function(v) Settings.Elliot_PizzaLowHP = v end })
@@ -2242,86 +2352,123 @@ ElliotTab:AddSlider({ Name = "Pizza Speed", Min = 40, Max = 150, Default = 80, C
 ElliotTab:AddSlider({ Name = "Prediction", Min = 0, Max = 2, Default = 0.5, Decimals = 1, Callback = function(v) Settings.Elliot_PizzaPrediction = v end })
 ElliotTab:AddSlider({ Name = "Smoothness", Min = 0.1, Max = 1, Default = 0.5, Decimals = 2, Callback = function(v) Settings.Elliot_PizzaSmooth = v end })
 
--- Two Time
-local TTTab = SurvCat:AddTab("Two Time", I_SURV)
-TTTab:AddSection("Auto Backstab")
-TTTab:AddToggle({ Name = "Enable Auto Backstab", Default = false, Callback = function(v) if v then TT_Start() else TT_Stop() end end })
-TTTab:AddDropdown({ Name = "Backstab Type", Options = {"Teleport", "Lerp"}, Default = "Teleport", Callback = function(v) Settings.TT_BackstabType = v end })
-TTTab:AddSlider({ Name = "Trigger Distance", Min = 3, Max = 30, Default = 8, Callback = function(v) Settings.TT_MaxDist = v end })
-TTTab:AddSlider({ Name = "Behind Distance", Min = 0.5, Max = 5, Default = 1.7, Decimals = 1, Callback = function(v) Settings.TT_BehindDist = v end })
-TTTab:AddSlider({ Name = "Stab Delay", Min = 0, Max = 0.5, Default = 0.08, Decimals = 2, Callback = function(v) Settings.TT_DelayStab = v end })
-TTTab:AddToggle({ Name = "Killer Noclip", Default = false, Callback = function(v) Settings.TT_KillerNoclip = v end })
+local TTATab = SurvCat:AddTab("Two Time", "user-x")
+TTATab:AddSection("Auto Backstab")
+TTATab:AddToggle({ Name = "Enable Auto Backstab", Default = false, Callback = function(v) if v then TT_Start() else TT_Stop() end end })
+TTATab:AddDropdown({ Name = "Backstab Type", Options = { "Teleport", "Lerp" }, Default = "Teleport", Callback = function(v) Settings.TT_BackstabType = v end })
+TTATab:AddSlider({ Name = "Trigger Distance", Min = 3, Max = 30, Default = 8, Callback = function(v) Settings.TT_MaxDist = v end })
+TTATab:AddSlider({ Name = "Behind Distance", Min = 0.5, Max = 5, Default = 1.7, Decimals = 1, Callback = function(v) Settings.TT_BehindDist = v end })
+TTATab:AddSlider({ Name = "Stab Delay", Min = 0, Max = 0.5, Default = 0.08, Decimals = 2, Callback = function(v) Settings.TT_DelayStab = v end })
+TTATab:AddToggle({ Name = "Killer Noclip", Default = false, Callback = function(v) Settings.TT_KillerNoclip = v end })
 
--- 007n7
-local N007Tab = SurvCat:AddTab("007n7", I_SURV)
+local N007Tab = SurvCat:AddTab("007n7", "eye-off")
 N007Tab:AddSection("BodyBlock")
 N007Tab:AddToggle({ Name = "Enable BodyBlock", Default = false, Callback = function(v) Settings.N007_BodyBlock = v; if v then N007_Start() end end })
-N007Tab:AddDropdown({ Name = "Target", Options = {"Killer", "Survivor", "Nearest Survivor", "Yourself"}, Default = "Killer", Callback = function(v) Settings.N007_BB_Target = v end })
+N007Tab:AddDropdown({ Name = "Target", Options = { "Killer", "Survivor", "Nearest Survivor", "Yourself" }, Default = "Killer", Callback = function(v) Settings.N007_BB_Target = v end })
 N007Tab:AddSlider({ Name = "Distance", Min = 1, Max = 15, Default = 7, Decimals = 1, Callback = function(v) Settings.N007_BB_Distance = v end })
 N007Tab:AddSlider({ Name = "Prediction", Min = 0, Max = 30, Default = 15, Callback = function(v) Settings.N007_BB_Prediction = v end })
 
--- Noli
-local NoliTab = KillCat:AddTab("Noli", I_KILL)
-NoliTab:AddSection("Noli")
+--═══════════════════════════════════════════════════════════════════
+-- KILLER
+--═══════════════════════════════════════════════════════════════════
+local KillerCat = Window:AddCategory("Killer")
+
+local NoliTab = KillerCat:AddTab("Noli", "swords")
+NoliTab:AddSection("Rush Control")
 NoliTab:AddToggle({ Name = "Enable Rush Control", Default = false, Callback = function(v) Settings.Noli_RushControl = v; Noli_Enable() end })
 NoliTab:AddToggle({ Name = "Auto Target", Default = false, Callback = function(v) Settings.Noli_AutoTarget = v; Noli_Enable() end })
 NoliTab:AddSlider({ Name = "Dash Speed", Min = 30, Max = 200, Default = 60, Callback = function(v) Settings.Noli_DashSpeed = v end })
 
--- Nosferatu
-local NosTab = KillCat:AddTab("Nosferatu", I_KILL)
-NosTab:AddSection("Nosferatu")
+local NosTab = KillerCat:AddTab("Nosferatu", "wing")
+NosTab:AddSection("Controls")
 NosTab:AddToggle({ Name = "Unlimited Fly", Default = false, Callback = function(v) Settings.Nos_FlyControl = v; Nos_Apply() end })
 NosTab:AddToggle({ Name = "Dive Control", Default = false, Callback = function(v) Settings.Nos_DiveControl = v; Nos_Apply() end })
 NosTab:AddToggle({ Name = "Cataclysm Control", Default = false, Callback = function(v) Settings.Nos_CataclysmControl = v; Nos_Apply() end })
 
--- Slasher
-local SlashTab = KillCat:AddTab("Slasher", I_KILL)
+local SlashTab = KillerCat:AddTab("Slasher", "knife")
 SlashTab:AddSection("Raging Pace")
 SlashTab:AddToggle({ Name = "Custom Speed", Default = false, Callback = function(v) Settings.Slash_CustomRage = v; Slash_Apply() end })
 SlashTab:AddSlider({ Name = "Speed Multiplier", Min = 1, Max = 3, Default = 2.1, Decimals = 1, Callback = function(v) Settings.Slash_RageMult = v; Slash_Apply() end })
 
--- Anti Debuffs
-local DBTab = MainCat:AddTab("Anti Debuffs", I_BOX)
-DBTab:AddSection("Status Effects")
-for _, name in ipairs({"Bleeding", "Nausea", "Blindness", "Confusion", "Hacked", "Glitched", "Corrupted", "Hallucination", "Oblivious", "Subspaced", "Slowness", "Stunned"}) do
-    DBTab:AddToggle({ Name = "Anti " .. name, Default = false, Callback = function(v) AntiDebuff_Set(name, v) end })
+--═══════════════════════════════════════════════════════════════════
+-- AIM
+--═══════════════════════════════════════════════════════════════════
+local AimCat = Window:AddCategory("Aim")
+
+local SATab = AimCat:AddTab("Silent Aim", "crosshair")
+SATab:AddSection("Silent Aim")
+SATab:AddToggle({ Name = "Enable Silent Aim", Default = false, Callback = function(v) if v then SilentAim_Enable() else SilentAim_Disable() end end })
+SATab:AddSlider({ Name = "FOV", Min = 50, Max = 800, Default = 150, Callback = function(v) Settings.SA_FOV = v end })
+SATab:AddToggle({ Name = "Wall Check", Default = false, Callback = function(v) Settings.SA_WallCheck = v end })
+SATab:AddSlider({ Name = "Prediction", Min = 0, Max = 1, Default = 0.15, Decimals = 2, Callback = function(v) Settings.SA_Prediction = v end })
+
+local MATab = AimCat:AddTab("Manual Aim", "crosshair")
+MATab:AddSection("Manual Aimbot")
+MATab:AddToggle({ Name = "Enable Manual Aim", Default = false, Callback = function(v) if v then MAimbot_Enable() else MAimbot_Disable() end end })
+MATab:AddDropdown({ Name = "Method", Options = { "Camera", "HRP", "Both" }, Default = "Both", Callback = function(v) Settings.MA_Method = v end })
+MATab:AddDropdown({ Name = "Target", Options = { "Auto", "Killers", "Survivors" }, Default = "Auto", Callback = function(v) Settings.MA_Target = v end })
+MATab:AddSlider({ Name = "Distance", Min = 5, Max = 500, Default = 20, Callback = function(v) Settings.MA_Distance = v end })
+MATab:AddSlider({ Name = "Prediction", Min = 0, Max = 2, Default = 0.1, Decimals = 2, Callback = function(v) Settings.MA_Prediction = v end })
+MATab:AddSlider({ Name = "Smoothness", Min = 1, Max = 100, Default = 35, Callback = function(v) Settings.MA_Smoothness = v end })
+MATab:AddToggle({ Name = "Ping Comp", Default = true, Callback = function(v) Settings.MA_PingComp = v end })
+
+local HBETab = AimCat:AddTab("Hitbox Expander", "maximize")
+HBETab:AddSection("Hitbox Expander")
+HBETab:AddToggle({ Name = "Enable Hitbox Expander", Default = false, Callback = function(v) if v then HBE_Enable() else HBE_Disable() end end })
+HBETab:AddSection("Warning: uses AssemblyLinearVelocity during attack animations")
+
+--═══════════════════════════════════════════════════════════════════
+-- ANTI
+--═══════════════════════════════════════════════════════════════════
+local AntiCat = Window:AddCategory("Anti")
+
+local DebuffTab = AntiCat:AddTab("Debuffs", "shield-off")
+DebuffTab:AddSection("Status Effects")
+for _, name in ipairs({"Bleeding","Nausea","Blindness","Confusion","Hacked","Glitched","Corrupted","Hallucination","Oblivious","Subspaced","Slowness","Stunned"}) do
+    DebuffTab:AddToggle({ Name = "Anti " .. name, Default = false, Callback = function(v) AntiDebuff_Set(name, v) end })
 end
-DBTab:AddToggle({ Name = "Anti Fall Slowness", Default = false, Callback = function(v) AntiDebuff_Set("FallSlow", v) end })
+DebuffTab:AddToggle({ Name = "Anti Fall Slowness", Default = false, Callback = function(v) AntiDebuff_Set("FallSlow", v) end })
 
--- Anti Bait Utilities
-local UBTab = MainCat:AddTab("Anti-Bait", I_BOX)
-UBTab:AddSection("Utilities")
-UBTab:AddToggle({ Name = "Anti Pull", Default = false, Callback = function(v) Settings.ABU_AntiPull = v; if v then ABU_StartPull() else ABU_StopPull() end end })
-UBTab:AddToggle({ Name = "Delete John Doe Trail", Default = false, Callback = function(v) Settings.ABU_DeleteTrail = v; if v then ABU_StartDeleteTrail() end end })
-UBTab:AddToggle({ Name = "Walkable Puddle", Default = false, Callback = function(v) Settings.ABU_WalkablePuddle = v; if v then ABU_StartWalkablePuddle() end end })
-UBTab:AddToggle({ Name = "Kill Door Collision", Default = false, Callback = function(v) Settings.ABU_KillDoorCollision = v; if v then ABU_StartKillDoor() end end })
-UBTab:AddToggle({ Name = "Anti Fake Gen", Default = false, Callback = function(v) Settings.ABU_AntiFakeGen = v; if v then ABU_StartFake() end end })
-UBTab:AddToggle({ Name = "Anti Fake Noli", Default = false, Callback = function(v) Settings.ABU_AntiFakeNoli = v; if v then ABU_StartFake() end end })
-UBTab:AddToggle({ Name = "Anti Clone 007n7", Default = false, Callback = function(v) Settings.ABU_AntiClone007 = v; if v then ABU_StartFake() end end })
+local UtilTab = AntiCat:AddTab("Utilities", "settings")
+UtilTab:AddSection("Anti-Bait Utilities")
+UtilTab:AddToggle({ Name = "Anti Pull", Default = false, Callback = function(v) Settings.ABU_AntiPull = v; if v then ABU_StartPull() else ABU_StopPull() end end })
+UtilTab:AddToggle({ Name = "Delete John Doe Trail", Default = false, Callback = function(v) Settings.ABU_DeleteTrail = v; if v then ABU_StartDeleteTrail() end end })
+UtilTab:AddToggle({ Name = "Walkable Puddle", Default = false, Callback = function(v) Settings.ABU_WalkablePuddle = v; if v then ABU_StartWalkablePuddle() end end })
+UtilTab:AddToggle({ Name = "Kill Door Collision", Default = false, Callback = function(v) Settings.ABU_KillDoorCollision = v; if v then ABU_StartKillDoor() end end })
+UtilTab:AddToggle({ Name = "Anti Fake Generators", Default = false, Callback = function(v) Settings.ABU_AntiFakeGen = v; if v then ABU_StartFake() end end })
+UtilTab:AddToggle({ Name = "Anti Fake Noli", Default = false, Callback = function(v) Settings.ABU_AntiFakeNoli = v; if v then ABU_StartFake() end end })
+UtilTab:AddToggle({ Name = "Anti Clone 007n7", Default = false, Callback = function(v) Settings.ABU_AntiClone007 = v; if v then ABU_StartFake() end end })
 
--- Player ESP
-local ESPPlTab = VisualCat:AddTab("Player ESP", I_VIS)
-ESPPlTab:AddSection("Player ESP")
-ESPPlTab:AddToggle({ Name = "Killer ESP (Red)", Default = false, Callback = function(v) Settings.ESP_Killer = v; ES_Refresh() end })
-ESPPlTab:AddToggle({ Name = "Survivor ESP (Green)", Default = false, Callback = function(v) Settings.ESP_Survivor = v; ES_Refresh() end })
-ESPPlTab:AddToggle({ Name = "Wall Check", Default = false, Callback = function(v) Settings.ESP_WallCheck = v end })
-ESPPlTab:AddSlider({ Name = "Max Distance", Min = 50, Max = 500, Default = 150, Callback = function(v) Settings.ESP_MaxDist = v end })
+--═══════════════════════════════════════════════════════════════════
+-- VISUAL
+--═══════════════════════════════════════════════════════════════════
+local VisCat = Window:AddCategory("Visual")
 
--- Object ESP
-local ESPObjTab = VisualCat:AddTab("Object ESP", I_VIS)
-ESPObjTab:AddSection("Object ESP")
-ESPObjTab:AddToggle({ Name = "Generator", Default = false, Callback = function(v) Settings.ESP_Generator = v; ES_Refresh() end })
-ESPObjTab:AddToggle({ Name = "Fake Generator", Default = false, Callback = function(v) Settings.ESP_FakeGenerator = v; ES_Refresh() end })
-ESPObjTab:AddToggle({ Name = "Medkit", Default = false, Callback = function(v) Settings.ESP_Medkit = v; ES_Refresh() end })
-ESPObjTab:AddToggle({ Name = "BloxyCola", Default = false, Callback = function(v) Settings.ESP_Bloxy = v; ES_Refresh() end })
-ESPObjTab:AddToggle({ Name = "Taph Traps", Default = false, Callback = function(v) Settings.OBJ_TaphTraps = v; ES_Refresh() end })
-ESPObjTab:AddToggle({ Name = "Vee Graffiti", Default = false, Callback = function(v) Settings.OBJ_VeerGraffiti = v; ES_Refresh() end })
-ESPObjTab:AddToggle({ Name = "Two Time Rituals", Default = false, Callback = function(v) Settings.OBJ_TwoTimeRitual = v; ES_Refresh() end })
-ESPObjTab:AddToggle({ Name = "Builderman", Default = false, Callback = function(v) Settings.OBJ_Builderman = v; ES_Refresh() end })
-ESPObjTab:AddToggle({ Name = "Azure Traps", Default = false, Callback = function(v) Settings.OBJ_AzureTraps = v; ES_Refresh() end })
+local ESPTab = VisCat:AddTab("Players", "eye")
+ESPTab:AddSection("Player ESP")
+ESPTab:AddToggle({ Name = "Killer ESP (Red)", Default = false, Callback = function(v) Settings.ESP_Killer = v; ES_Refresh() end })
+ESPTab:AddToggle({ Name = "Survivor ESP (Green)", Default = false, Callback = function(v) Settings.ESP_Survivor = v; ES_Refresh() end })
+ESPTab:AddToggle({ Name = "Wall Check", Default = false, Callback = function(v) Settings.ESP_WallCheck = v end })
+ESPTab:AddSlider({ Name = "Max Distance", Min = 50, Max = 500, Default = 150, Callback = function(v) Settings.ESP_MaxDist = v end })
 
--- Generator
-local GenTab = MainCat:AddTab("Generator", I_GEN)
+local ObjTab = VisCat:AddTab("Objects", "box")
+ObjTab:AddSection("Objects ESP")
+ObjTab:AddToggle({ Name = "Generator ESP", Default = false, Callback = function(v) Settings.ESP_Generator = v; ES_Refresh() end })
+ObjTab:AddToggle({ Name = "Fake Generator ESP", Default = false, Callback = function(v) Settings.ESP_FakeGenerator = v; ES_Refresh() end })
+ObjTab:AddToggle({ Name = "Medkit ESP", Default = false, Callback = function(v) Settings.ESP_Medkit = v; ES_Refresh() end })
+ObjTab:AddToggle({ Name = "BloxyCola ESP", Default = false, Callback = function(v) Settings.ESP_Bloxy = v; ES_Refresh() end })
+ObjTab:AddSection("Object Categories")
+ObjTab:AddToggle({ Name = "Taph Traps", Default = false, Callback = function(v) Settings.OBJ_TaphTraps = v; ES_Refresh() end })
+ObjTab:AddToggle({ Name = "Veeronica Graffiti", Default = false, Callback = function(v) Settings.OBJ_VeerGraffiti = v; ES_Refresh() end })
+ObjTab:AddToggle({ Name = "Two Time Rituals", Default = false, Callback = function(v) Settings.OBJ_TwoTimeRitual = v; ES_Refresh() end })
+ObjTab:AddToggle({ Name = "Builderman Sentry/Dispenser", Default = false, Callback = function(v) Settings.OBJ_Builderman = v; ES_Refresh() end })
+ObjTab:AddToggle({ Name = "Azure Traps", Default = false, Callback = function(v) Settings.OBJ_AzureTraps = v; ES_Refresh() end })
+
+--═══════════════════════════════════════════════════════════════════
+-- GENERATOR
+--═══════════════════════════════════════════════════════════════════
+local GenCat = Window:AddCategory("Generator")
+local GenTab = GenCat:AddTab("Solver", "cpu")
 GenTab:AddSection("Generator Solver")
 GenTab:AddToggle({ Name = "Enable Solver", Default = false, Callback = function(v) if v then GS_Enable() else GS_Disable() end end })
 GenTab:AddSlider({ Name = "Start Delay (s)", Min = 0, Max = 5, Default = 1.5, Decimals = 1, Callback = function(v) Settings.GS_StartDelay = v end })
@@ -2330,9 +2477,13 @@ GenTab:AddSlider({ Name = "Connect Speed (s)", Min = 0.05, Max = 3, Default = 1.
 GenTab:AddSlider({ Name = "Gear Speed (s)", Min = 0.005, Max = 0.5, Default = 0.03, Decimals = 3, Callback = function(v) Settings.GS_GearDelay = v end })
 GenTab:AddSlider({ Name = "Lock Speed (s)", Min = 0.02, Max = 0.5, Default = 0.08, Decimals = 3, Callback = function(v) Settings.GS_LockDelay = v end })
 
--- Stamina
-local StamTab = MainCat:AddTab("Stamina", I_RUN)
-StamTab:AddSection("Infinite Stamina")
+--═══════════════════════════════════════════════════════════════════
+-- MISC
+--═══════════════════════════════════════════════════════════════════
+local MiscCat = Window:AddCategory("Misc")
+
+local StamTab = MiscCat:AddTab("Stamina", "zap")
+StamTab:AddSection("Stamina")
 StamTab:AddToggle({ Name = "Infinite Stamina", Default = false, Callback = function(v) Stam_SetInfinite(v) end })
 StamTab:AddButton({ Name = "Restore Original", Callback = function() Stam_Restore() end })
 StamTab:AddSection("Overrides")
@@ -2342,8 +2493,7 @@ StamTab:AddSlider({ Name = "Stamina Gain", Min = 1, Max = 1000, Default = 20, Ca
 StamTab:AddSlider({ Name = "Stamina Drain", Min = 0, Max = 1000, Default = 10, Callback = function(v) Settings.Stam_Drain = v; Stam_Apply() end })
 StamTab:AddSlider({ Name = "Regen Delay", Min = 0, Max = 10, Default = 0.5, Decimals = 2, Callback = function(v) Settings.Stam_Regen = v; Stam_Apply() end })
 
--- Gameplay
-local GPTab = MainCat:AddTab("Gameplay", I_BOX)
+local GPTab = MiscCat:AddTab("Gameplay", "gamepad-2")
 GPTab:AddSection("Performance")
 GPTab:AddButton({
     Name = "FPS Boost (one-time)",
@@ -2365,7 +2515,7 @@ GPTab:AddButton({
                 end
             end
         end)
-        notify("FPS Boost", "Applied")
+        Window:Notification({ Name = "FPS Boost", Description = "Applied", Duration = 3 })
     end,
 })
 GPTab:AddSection("External")
@@ -2374,35 +2524,27 @@ GPTab:AddButton({
     Callback = function()
         pcall(function()
             loadstring(game:HttpGet("https://raw.githubusercontent.com/zxcursedsocute/Forsaken-Script/refs/heads/main/anti%20lag%20test"))()
-            notify("Blue Hitbox", "Executed")
+            Window:Notification({ Name = "Blue Hitbox", Description = "Executed", Duration = 3 })
         end)
     end,
 })
 
--- Config
-local CFTab = MainCat:AddTab("Config", I_BOX)
-CFTab:AddSection("Actions")
-CFTab:AddButton({
-    Name = "Disable All Features",
-    Callback = function()
-        pcall(AB_Disable); pcall(ABT_Disable); pcall(PA_Disable); pcall(HDT_Disable)
-        pcall(AM1_Disable); pcall(GS_Disable); pcall(SilentAim_Disable); pcall(MAimbot_Disable); pcall(HBE_Disable)
-        pcall(Shed_Disable); pcall(TT_Stop); pcall(Elliot_Stop); pcall(ABU_StopPull)
-        Settings.AIM_Enabled = false
-        notify("C00lsaken", "All features disabled")
-    end,
-})
-
--- Credits
-local CRTab = HomeCat:AddTab("Credits", I_TEXT)
-CRTab:AddSection("Credits")
-CRTab:AddParagraph("C00lsaken v3.3", "Merged build — Auto Block + Silent Aim + Hitbox Expander + per-character exploits")
-CRTab:AddParagraph("Original credits", "c00lkid / random_dude / Viltrumite / Ivy")
+local ConfigTab = MiscCat:AddTab("Config", "save")
+ConfigTab:AddSection("Actions")
+ConfigTab:AddButton({ Name = "Disable All", Callback = function()
+    pcall(AB_Disable); pcall(ABT_Disable); pcall(PA_Disable); pcall(HDT_Disable)
+    pcall(AM1_Disable); pcall(GS_Disable)
+    pcall(SilentAim_Disable); pcall(MAimbot_Disable); pcall(HBE_Disable)
+    pcall(Shed_Disable); pcall(TT_Stop); pcall(Elliot_Stop)
+    Settings.AIM_Enabled = false
+    Window:Notification({ Name = "C00lsaken", Description = "All features disabled", Duration = 3 })
+end })
 
 --═══════════════════════════════════════════════════════════════════
 -- STARTUP
 --═══════════════════════════════════════════════════════════════════
 task.spawn(Aim_SetupHook)
 Stam_EnsureMod()
-notify("C00lsaken v3.3", "Loaded — Theme: " .. activeTheme)
-print("[C00lsaken v3.3] Loaded. Theme:", activeTheme, "| Buffer:", _hasBuffer, "| RightControl toggles.")
+
+Window:Notification({ Name = "C00lsaken v3.0", Description = "Merged build loaded — Cursed theme", Duration = 4 })
+print("[C00lsaken v3.0] Loaded. RightControl to toggle UI.")
