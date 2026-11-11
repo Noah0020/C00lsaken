@@ -34,17 +34,17 @@ local Window = Library:CreateWindow({
     Icon = "rbxassetid://72996766218088"
 })
 
--- Tabs — Player moved right after ESP
+-- TABS: Player right after ESP
 local Tabs = {
-    ["ESP"]         = Window:AddTab("ESP", "scan"),
-    ["Player"]      = Window:AddTab("Player", "heart"),
+    ["ESP"]         = Window:AddTab("ESP", "eye"),
+    ["Player"]      = Window:AddTab("Player", "user"),
     ["Generator"]   = Window:AddTab("Generator", "cpu"),
     ["Aimbot"]      = Window:AddTab("Aimbot", "crosshair"),
-    ["Killer"]      = Window:AddTab("Killer", "target"),
+    ["Killer"]      = Window:AddTab("Killer", "sword"),
     ["Block"]       = Window:AddTab("Block", "shield"),
     ["Stab"]        = Window:AddTab("Stab", "sword"),
     ["Sk8"]         = Window:AddTab("Sk8", "activity"),
-    ["UI Settings"] = Window:AddTab("UI Settings", "sliders"),
+    ["UI Settings"] = Window:AddTab("UI Settings", "settings"),
 }
 
 --═══ ESP ═══
@@ -116,34 +116,37 @@ local function GetGeneratorPart(model)
     return nil
 end
 
--- FIXED: respects killer/survivor name + health toggles
 local function applyESPText(data)
-    if not data.model or not data.model.Parent then return end
+    if not data or not data.model or not data.model.Parent then return end
     local m = data.model
     local isK = data.isKiller
     local showName = isK and ESPSettings.killerNameESP or (not isK and ESPSettings.survivorNameESP)
     local showHealth = isK and ESPSettings.killerHealthESP or (not isK and ESPSettings.survivorHealthESP)
     local showSkin = isK and ESPSettings.killerSkinESP or (not isK and ESPSettings.survivorSkinESP)
-    if showName then
-        local displayName = m:GetAttribute("ActorDisplayName") or (isK and "KILLER" or "SURVIVOR")
-        local text = displayName
-        if showSkin then
-            local skinName = m:GetAttribute("SkinNameDisplay")
-            if skinName and skinName ~= "" then text = text .. " | " .. skinName end
+    if data.nameLabel and data.nameLabel.Parent then
+        if showName then
+            local displayName = m:GetAttribute("ActorDisplayName") or (isK and "KILLER" or "SURVIVOR")
+            local text = displayName
+            if showSkin then
+                local skinName = m:GetAttribute("SkinNameDisplay")
+                if skinName and skinName ~= "" then text = text .. " | " .. skinName end
+            end
+            data.nameLabel.Text = text
+            data.nameLabel.Visible = true
+        else
+            data.nameLabel.Visible = false
         end
-        data.nameLabel.Text = text
-        data.nameLabel.Visible = true
-    else
-        data.nameLabel.Visible = false
     end
-    if showHealth then
-        local humanoid = m:FindFirstChild("Humanoid")
-        if humanoid then
-            data.hpLabel.Text = string.format("HP: %d/%d", math.floor(humanoid.Health), math.floor(humanoid.MaxHealth))
+    if data.hpLabel and data.hpLabel.Parent then
+        if showHealth then
+            local humanoid = m:FindFirstChild("Humanoid")
+            if humanoid then
+                data.hpLabel.Text = string.format("HP: %d/%d", math.floor(humanoid.Health), math.floor(humanoid.MaxHealth))
+            end
+            data.hpLabel.Visible = true
+        else
+            data.hpLabel.Visible = false
         end
-        data.hpLabel.Visible = true
-    else
-        data.hpLabel.Visible = false
     end
     if data.highlight and data.highlight.Parent then
         if isK then
@@ -198,14 +201,13 @@ local function createPlayerESP(model, color, isKiller)
     hpLabel.Parent = billboard
     local data = { model = model, nameLabel = nameLabel, hpLabel = hpLabel, isKiller = isKiller, highlight = highlight }
     table.insert(PlayerESPData, data)
-    local function updateText() applyESPText(data) end
-    updateText()
-    model:GetAttributeChangedSignal("ActorDisplayName"):Connect(updateText)
-    model:GetAttributeChangedSignal("SkinNameDisplay"):Connect(updateText)
+    applyESPText(data)
+    model:GetAttributeChangedSignal("ActorDisplayName"):Connect(function() applyESPText(data) end)
+    model:GetAttributeChangedSignal("SkinNameDisplay"):Connect(function() applyESPText(data) end)
     local humanoid = model:FindFirstChild("Humanoid")
     if humanoid then
-        humanoid:GetPropertyChangedSignal("Health"):Connect(updateText)
-        humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(updateText)
+        humanoid:GetPropertyChangedSignal("Health"):Connect(function() applyESPText(data) end)
+        humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function() applyESPText(data) end)
     end
 end
 
@@ -259,11 +261,10 @@ local function CreateObjectESP(model, color, isGenerator, isItem, isPizza, isPiz
     local textLabel = Instance.new("TextLabel")
     textLabel.Size = UDim2.new(1, 0, 1, 0)
     textLabel.BackgroundTransparency = 1
-    if displayText then
-        textLabel.Text = displayText
+    if displayText then textLabel.Text = displayText
     else
         local typeAttr = model:GetAttribute("Type")
-        if typeAttr then textLabel.Text = typeAttr else textLabel.Text = model.Name end
+        textLabel.Text = typeAttr or model.Name
     end
     textLabel.Font = Enum.Font.GothamMedium
     textLabel.TextColor3 = color
@@ -404,7 +405,10 @@ local function UpdateESP()
     end
 end
 task.spawn(function() while task.wait(0.5) do pcall(UpdateESP) end end)
-function EspLib:GetSettings() return ESPSettings end
+-- FORCE text updates every frame so name/health toggles apply instantly
+RunService.RenderStepped:Connect(function()
+    for _, d in ipairs(PlayerESPData) do pcall(applyESPText, d) end
+end)
 function EspLib:UpdateAllPlayerText()
     for _, d in ipairs(PlayerESPData) do pcall(applyESPText, d) end
 end
@@ -607,19 +611,19 @@ genLeft:AddToggle("FlowAutoSolve", { Text = "Auto Solve", Default = flow.on, Cal
 local genRight = Tabs.Generator:AddRightGroupbox("Settings", "sliders")
 genRight:AddSlider("FlowSpeed", { Text = "Auto Solve Speed", Default = flow.nodeDelay, Min = 0.01, Max = 0.50, Rounding = 2, Callback = function(Value) flow.nodeDelay = Value end })
 
---═══ AIMBOT CORE (defined before UI so snap aim can be wired) ═══
+--═══ AIMBOT CORE ═══
 local settings = { distance = 100, smoothness = 20, duration = 50, targetPath = "auto", globalSound = false, silentAim = false }
 local triggerConnections = {}
 local modules = {}
-function registerTriggerModule(name, enableFunc, disableFunc)
+local function registerTriggerModule(name, enableFunc, disableFunc)
     modules[name] = { enabled = false, enable = enableFunc, disable = disableFunc }
 end
-function toggleModule(name, state)
+local function toggleModule(name, state)
     local mod = modules[name]; if not mod then return end
     if state and not mod.enabled then mod.enable(); mod.enabled = true
     elseif not state and mod.enabled then mod.disable(); mod.enabled = false end
 end
-function getNearestTarget()
+local function getNearestTarget()
     local player = game.Players.LocalPlayer
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return nil end
     local myHRP = player.Character.HumanoidRootPart
@@ -629,8 +633,6 @@ function getNearestTarget()
     if path == "auto" then
         local candidates = {
             workspace:FindFirstChild("Players"), workspace:FindFirstChild("Characters"), workspace:FindFirstChild("Living"),
-            workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Players"),
-            workspace:FindFirstChild("Model") and workspace.Model:FindFirstChild("Players"),
         }
         for _, container in ipairs(candidates) do
             if container and (container:IsA("Folder") or container:IsA("Model")) then
@@ -664,14 +666,14 @@ function getNearestTarget()
     end
     return nearest
 end
-function SmoothCameraLookAt(currentCamCF, targetPos, progress)
+local function SmoothCameraLookAt(currentCamCF, targetPos, progress)
     local targetLook = (targetPos - currentCamCF.Position).Unit
     local currentLook = currentCamCF.LookVector
     local newLook = currentLook:Lerp(targetLook, progress)
     return CFrame.lookAt(currentCamCF.Position, currentCamCF.Position + newLook * 100)
 end
 local activeAimConnection = nil
-function executeAim()
+local function executeAim()
     if activeAimConnection then activeAimConnection:Disconnect(); activeAimConnection = nil end
     local target = getNearestTarget()
     if not target or not target:FindFirstChild("HumanoidRootPart") then return end
@@ -694,8 +696,8 @@ function executeAim()
     activeAimConnection = conn
 end
 
---═══ SNAP AIM (rewritten: AnimationPlayed + PivotTo for instant snap) ═══
-function createAnimationTrigger(moduleName, animIds, targetType, useCamera)
+--═══ INSTANT SNAP AIM (direct AnimationPlayed + PivotTo) ═══
+local function createAnimationTrigger(moduleName, animIds, targetType, useCamera)
     local isActive = false
     local animConn = nil
     local charConn = nil
@@ -721,6 +723,7 @@ function createAnimationTrigger(moduleName, animIds, targetType, useCamera)
     local function doSnap()
         local char = game.Players.LocalPlayer.Character
         if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
         local target = getTarget()
@@ -736,7 +739,13 @@ function createAnimationTrigger(moduleName, animIds, targetType, useCamera)
             if flatDir.Magnitude > 0.01 then
                 flatDir = flatDir.Unit
                 local newCF = CFrame.lookAt(hrp.Position, hrp.Position + flatDir)
+                local wasAuto = hum and hum.AutoRotate
+                if hum then hum.AutoRotate = false end
                 pcall(function() char:PivotTo(newCF) end)
+                pcall(function() hrp.CFrame = newCF end)
+                task.delay(0.15, function()
+                    if hum and hum.Parent then hum.AutoRotate = wasAuto end
+                end)
             end
             if targetType == "Dusekkar" or targetType == "JaneDoe" then
                 local cam = workspace.CurrentCamera
@@ -750,7 +759,7 @@ function createAnimationTrigger(moduleName, animIds, targetType, useCamera)
         if not aid then return end
         local numericId = tostring(aid):match("%d+")
         if numericId and animIds[numericId] then
-            task.spawn(doSnap)
+            doSnap()
         end
     end
     local function attachToChar(char)
@@ -781,7 +790,7 @@ end
 local silentAimEnabled = false
 local silentAimDistance = 100
 local silentAimConnection = nil
-function isKiller()
+local function isKiller()
     local kf = workspace.Players and workspace.Players:FindFirstChild("Killers")
     local LocalPlayer = game.Players.LocalPlayer
     if kf and LocalPlayer.Character then
@@ -791,7 +800,7 @@ function isKiller()
     end
     return false
 end
-function getClosestSurvivor()
+local function getClosestSurvivor()
     local sf = workspace.Players and workspace.Players:FindFirstChild("Survivors")
     if not sf then return nil end
     local LocalPlayer = game.Players.LocalPlayer
@@ -807,7 +816,7 @@ function getClosestSurvivor()
     end
     return closest
 end
-function faceTarget(model)
+local function faceTarget(model)
     if not model or not model:FindFirstChild("HumanoidRootPart") then return end
     local char = game.Players.LocalPlayer.Character
     if not char then return end
@@ -815,20 +824,23 @@ function faceTarget(model)
     local targetPos = model.HumanoidRootPart.Position
     root.CFrame = CFrame.new(root.Position, Vector3.new(targetPos.X, root.Position.Y, targetPos.Z))
 end
-function StartSilentAim()
+registerTriggerModule("SilentAim", function()
+    silentAimEnabled = true
     if silentAimConnection then silentAimConnection:Disconnect() end
     silentAimConnection = game:GetService("RunService").Heartbeat:Connect(function()
         if not silentAimEnabled or not isKiller() then return end
         local target = getClosestSurvivor()
         if target then faceTarget(target) end
     end)
-end
-registerTriggerModule("SilentAim", function() silentAimEnabled = true; StartSilentAim() end, function() silentAimEnabled = false; if silentAimConnection then silentAimConnection:Disconnect(); silentAimConnection = nil end end)
+end, function()
+    silentAimEnabled = false
+    if silentAimConnection then silentAimConnection:Disconnect(); silentAimConnection = nil end
+end)
 
 local johnaim = false; local Noloop = nil; local No2loop = nil
 local aimbotNoilsounds = { "StarBomb", "StarBombTrail", "StarBombExplosion" }
 local aimbotNoilsounds2 = { "VoidRush", "VoidRushTrail" }
-function NoilStarAim(state)
+local function NoilStarAim(state)
     johnaim = state; local LocalPlayer = game.Players.LocalPlayer
     if state then
         if Noloop then Noloop:Disconnect() end
@@ -865,7 +877,7 @@ function NoilStarAim(state)
         end)
     else if Noloop then Noloop:Disconnect(); Noloop = nil end end
 end
-function NoilVoidAim(state)
+local function NoilVoidAim(state)
     johnaim = state; local LocalPlayer = game.Players.LocalPlayer
     if state then
         if No2loop then No2loop:Disconnect() end
@@ -905,12 +917,13 @@ end
 registerTriggerModule("NoilStar", function() NoilStarAim(true) end, function() NoilStarAim(false) end)
 registerTriggerModule("NoilVoid", function() NoilVoidAim(true) end, function() NoilVoidAim(false) end)
 
--- Register all animation triggers
+-- Register animation triggers (SURVIVOR abilities aim at Killers)
 createAnimationTrigger("JaneDoe", { ["106527725058030"] = true, ["139929602101552"] = true }, "Killers", false)
 createAnimationTrigger("JaneDoeAxe", { ["111918351126361"] = true }, "Killers", false)
 createAnimationTrigger("Chance", { ["103601716322988"] = true, ["133491532453922"] = true, ["86371356500204"] = true, ["76649505662612"] = true, ["81698196845041"] = true }, "Killers", false)
 createAnimationTrigger("Dusekkar", { ["77894750279891"] = true }, "Killers", true)
 createAnimationTrigger("Punch", { ["108911997126897"] = true, ["82137285150006"] = true, ["129843313690921"] = true, ["140703210927645"] = true, ["136007065400978"] = true, ["86096387000557"] = true, ["87259391926321"] = true, ["86709774283672"] = true, ["108807732150251"] = true, ["138040001965654"] = true }, "Killers", false)
+-- KILLER abilities aim at Survivors
 createAnimationTrigger("1x4", { ["99050723653468"] = true, ["119181003138006"] = true }, "Survivors", false)
 createAnimationTrigger("C00kidd", { ["18885919947"] = true }, "Survivors", true)
 createAnimationTrigger("JohnDoe", { ["127172483138092"] = true }, "Survivors", true)
@@ -946,54 +959,92 @@ registerTriggerModule("SoundTrigger", function() soundTriggerEnabled = true; set
     if globalSoundConn then pcall(function() globalSoundConn:Disconnect() end); globalSoundConn = nil end
 end)
 
---═══ AIMBOT UI (General + Killer Aim = JaneDoe, Chance, Dusekkar, Punch) ═══
+--═══ AIMBOT TAB — Survivor Aim (JaneDoe, JaneDoeAxe, Chance, Dusekkar, Punch) ═══
 local generalGroup = Tabs.Aimbot:AddLeftGroupbox("General Aim", "crosshair")
-local killerAimGroup = Tabs.Aimbot:AddRightGroupbox("Killer Aim", "target")
-generalGroup:AddSlider("GAA_Distance", { Text = "Aim Distance", Default = settings.distance, Min = 10, Max = 500, Rounding = 1, Callback = function(v) settings.distance = v end })
-generalGroup:AddSlider("GAA_Smoothness", { Text = "Camera Smoothness", Default = settings.smoothness, Min = 0, Max = 100, Rounding = 1, Callback = function(v) settings.smoothness = v end })
-generalGroup:AddSlider("GAA_Duration", { Text = "Lock Duration", Default = settings.duration, Min = 1, Max = 200, Rounding = 1, Callback = function(v) settings.duration = v end })
-generalGroup:AddTextbox("GAA_TargetPath", { Text = "Target Path (leave empty for auto)", Default = "", Placeholder = "e.g. workspace.Players", Callback = function(v) settings.targetPath = (v ~= "" and v) or "auto" end })
-generalGroup:AddToggle("SilentAimToggle", { Text = "Silent Aim (Killer)", Default = false, Callback = function(v) toggleModule("SilentAim", v) end })
-generalGroup:AddToggle("SoundTriggerToggle", { Text = "Sound Trigger Aim", Default = false, Callback = function(v) toggleModule("SoundTrigger", v) end })
-killerAimGroup:AddToggle("JaneDoeToggle", { Text = "Jane Doe Aim", Default = false, Callback = function(v) toggleModule("JaneDoe", v) end })
-killerAimGroup:AddToggle("JaneDoeAxeToggle", { Text = "Jane Doe Axe Aim", Default = false, Callback = function(v) toggleModule("JaneDoeAxe", v) end })
-killerAimGroup:AddToggle("ChanceToggle", { Text = "Chance Aim", Default = false, Callback = function(v) toggleModule("Chance", v) end })
-killerAimGroup:AddToggle("DusekkarToggle", { Text = "Dusekkar Aim (Camera)", Default = false, Callback = function(v) toggleModule("Dusekkar", v) end })
-killerAimGroup:AddToggle("PunchToggle", { Text = "Punch Aim", Default = false, Callback = function(v) toggleModule("Punch", v) end })
+pcall(function()
+    generalGroup:AddSlider("GAA_Distance", { Text = "Aim Distance", Default = settings.distance, Min = 10, Max = 500, Rounding = 1, Callback = function(v) settings.distance = v end })
+end)
+pcall(function()
+    generalGroup:AddSlider("GAA_Smoothness", { Text = "Camera Smoothness", Default = settings.smoothness, Min = 0, Max = 100, Rounding = 1, Callback = function(v) settings.smoothness = v end })
+end)
+pcall(function()
+    generalGroup:AddSlider("GAA_Duration", { Text = "Lock Duration", Default = settings.duration, Min = 1, Max = 200, Rounding = 1, Callback = function(v) settings.duration = v end })
+end)
+pcall(function()
+    generalGroup:AddToggle("SilentAimToggle", { Text = "Silent Aim (Killer)", Default = false, Callback = function(v) toggleModule("SilentAim", v) end })
+end)
+pcall(function()
+    generalGroup:AddToggle("SoundTriggerToggle", { Text = "Sound Trigger Aim", Default = false, Callback = function(v) toggleModule("SoundTrigger", v) end })
+end)
+local survivorAimGroup = Tabs.Aimbot:AddRightGroupbox("Survivor Aim", "user")
+pcall(function()
+    survivorAimGroup:AddToggle("JaneDoeToggle", { Text = "Jane Doe Aim", Default = false, Callback = function(v) toggleModule("JaneDoe", v) end })
+end)
+pcall(function()
+    survivorAimGroup:AddToggle("JaneDoeAxeToggle", { Text = "Jane Doe Axe Aim", Default = false, Callback = function(v) toggleModule("JaneDoeAxe", v) end })
+end)
+pcall(function()
+    survivorAimGroup:AddToggle("ChanceToggle", { Text = "Chance Aim", Default = false, Callback = function(v) toggleModule("Chance", v) end })
+end)
+pcall(function()
+    survivorAimGroup:AddToggle("DusekkarToggle", { Text = "Dusekkar Aim (Camera)", Default = false, Callback = function(v) toggleModule("Dusekkar", v) end })
+end)
+pcall(function()
+    survivorAimGroup:AddToggle("PunchToggle", { Text = "Punch Aim", Default = false, Callback = function(v) toggleModule("Punch", v) end })
+end)
 
---═══ KILLER TAB (Survivor Aim = 1x4, c00lkidd, JohnDoe, Nosferatu, Noli) ═══
-local survivorAimGroup = Tabs.Killer:AddLeftGroupbox("Survivor Aim", "user")
-survivorAimGroup:AddToggle("Onex4Toggle", { Text = "1x4 Aim", Default = false, Callback = function(v) toggleModule("1x4", v) end })
-survivorAimGroup:AddToggle("CookiddToggle", { Text = "C00kidd Aim (Camera)", Default = false, Callback = function(v) toggleModule("C00kidd", v) end })
-survivorAimGroup:AddToggle("JohnDoeToggle", { Text = "John Doe Aim (Camera)", Default = false, Callback = function(v) toggleModule("JohnDoe", v) end })
-survivorAimGroup:AddToggle("NosferatuToggle", { Text = "Nosferatu Aim (Camera)", Default = false, Callback = function(v) toggleModule("Nosferatu", v) end })
-survivorAimGroup:AddToggle("NoilStarToggle", { Text = "Noil Star Bomb Aim", Default = false, Callback = function(v) toggleModule("NoilStar", v) end })
-survivorAimGroup:AddToggle("NoilVoidToggle", { Text = "Noil Void Rush Aim", Default = false, Callback = function(v) toggleModule("NoilVoid", v) end })
+--═══ KILLER TAB — Killer Aim (1x4, C00kidd, JohnDoe, Nosferatu, NoliStar, NoliVoid) ═══
+local killerAimGroup = Tabs.Killer:AddLeftGroupbox("Killer Aim", "crosshair")
+pcall(function()
+    killerAimGroup:AddToggle("Onex4Toggle", { Text = "1x4 Aim", Default = false, Callback = function(v) toggleModule("1x4", v) end })
+end)
+pcall(function()
+    killerAimGroup:AddToggle("CookiddToggle", { Text = "C00kidd Aim (Camera)", Default = false, Callback = function(v) toggleModule("C00kidd", v) end })
+end)
+pcall(function()
+    killerAimGroup:AddToggle("JohnDoeToggle", { Text = "John Doe Aim (Camera)", Default = false, Callback = function(v) toggleModule("JohnDoe", v) end })
+end)
+pcall(function()
+    killerAimGroup:AddToggle("NosferatuToggle", { Text = "Nosferatu Aim (Camera)", Default = false, Callback = function(v) toggleModule("Nosferatu", v) end })
+end)
+pcall(function()
+    killerAimGroup:AddToggle("NoilStarToggle", { Text = "Noil Star Bomb Aim", Default = false, Callback = function(v) toggleModule("NoilStar", v) end })
+end)
+pcall(function()
+    killerAimGroup:AddToggle("NoilVoidToggle", { Text = "Noil Void Rush Aim", Default = false, Callback = function(v) toggleModule("NoilVoid", v) end })
+end)
 
---═══ BLOCK + HDT (WIREFRAME GRID) ═══
+--═══ BLOCK TAB — GRID WIREFRAME (red default, green on overlap) ═══
 local BLOCK_COOLDOWN = 27
 local lastBlockTime = 0
 local blockPerKiller = {}
-local BlockVisuals = {}
+local GridVisuals = {}  -- killer -> { parts, expiresAt }
 
-local WIRE_CORNERS = {
-    Vector3.new(-0.5, -0.5, -0.5), Vector3.new(0.5, -0.5, -0.5),
-    Vector3.new(0.5, -0.5, 0.5),   Vector3.new(-0.5, -0.5, 0.5),
-    Vector3.new(-0.5, 0.5, -0.5),  Vector3.new(0.5, 0.5, -0.5),
-    Vector3.new(0.5, 0.5, 0.5),    Vector3.new(-0.5, 0.5, 0.5),
+local GRID_EDGES = {
+    {Vector3.new(-0.5,-0.5,-0.5), Vector3.new(0.5,-0.5,-0.5)},
+    {Vector3.new(0.5,-0.5,-0.5),  Vector3.new(0.5,-0.5,0.5)},
+    {Vector3.new(0.5,-0.5,0.5),   Vector3.new(-0.5,-0.5,0.5)},
+    {Vector3.new(-0.5,-0.5,0.5),  Vector3.new(-0.5,-0.5,-0.5)},
+    {Vector3.new(-0.5,0.5,-0.5),  Vector3.new(0.5,0.5,-0.5)},
+    {Vector3.new(0.5,0.5,-0.5),   Vector3.new(0.5,0.5,0.5)},
+    {Vector3.new(0.5,0.5,0.5),    Vector3.new(-0.5,0.5,0.5)},
+    {Vector3.new(-0.5,0.5,0.5),   Vector3.new(-0.5,0.5,-0.5)},
+    {Vector3.new(-0.5,-0.5,-0.5), Vector3.new(-0.5,0.5,-0.5)},
+    {Vector3.new(0.5,-0.5,-0.5),  Vector3.new(0.5,0.5,-0.5)},
+    {Vector3.new(0.5,-0.5,0.5),   Vector3.new(0.5,0.5,0.5)},
+    {Vector3.new(-0.5,-0.5,0.5),  Vector3.new(-0.5,0.5,0.5)},
 }
-local WIRE_EDGES = {{1,2},{2,3},{3,4},{4,1},{5,6},{6,7},{7,8},{8,5},{1,5},{2,6},{3,7},{4,8}}
 
-local function getOrCreateBlockVisual(killer)
-    local v = BlockVisuals[killer]
+local function getOrCreateGrid(killer)
+    local v = GridVisuals[killer]
     if v and v.folder and v.folder.Parent then return v end
     local folder = Instance.new("Folder")
-    folder.Name = "Ck_BlockVisual"
+    folder.Name = "Ck_BlockGrid"
     folder.Parent = Workspace
     local parts = {}
     for i = 1, 12 do
         local part = Instance.new("Part")
-        part.Name = "Ck_WireEdge"
+        part.Name = "Ck_GridEdge"
         part.Anchored = true
         part.CanCollide = false
         part.CanTouch = false
@@ -1001,27 +1052,27 @@ local function getOrCreateBlockVisual(killer)
         part.CastShadow = false
         part.Material = Enum.Material.Neon
         part.Color = Color3.fromRGB(255, 60, 60)
-        part.Size = Vector3.new(0.1, 0.1, 0.1)
+        part.Size = Vector3.new(0.08, 0.08, 0.08)
         part.Transparency = 1
         part.Parent = folder
         parts[i] = part
     end
     v = { folder = folder, parts = parts, expiresAt = 0 }
-    BlockVisuals[killer] = v
+    GridVisuals[killer] = v
     return v
 end
 
-local function updateBlockVisual(v, cf, size, color)
-    for i, e in ipairs(WIRE_EDGES) do
-        local c1 = WIRE_CORNERS[e[1]] * size
-        local c2 = WIRE_CORNERS[e[2]] * size
+local function updateGrid(v, cf, size, color)
+    for i, edge in ipairs(GRID_EDGES) do
+        local c1 = edge[1] * size
+        local c2 = edge[2] * size
         local a = cf:PointToWorldSpace(c1)
         local b = cf:PointToWorldSpace(c2)
         local len = (b - a).Magnitude
         local part = v.parts[i]
         if part and part.Parent then
             if len > 0.01 then
-                part.Size = Vector3.new(0.1, 0.1, len)
+                part.Size = Vector3.new(0.08, 0.08, len)
                 part.CFrame = CFrame.lookAt((a + b) / 2, b)
                 part.Color = color
                 part.Transparency = 0
@@ -1032,7 +1083,7 @@ local function updateBlockVisual(v, cf, size, color)
     end
 end
 
-local function hideBlockVisual(v)
+local function hideGrid(v)
     for _, part in ipairs(v.parts) do
         if part and part.Parent then part.Transparency = 1 end
     end
@@ -1040,13 +1091,11 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(0.3)
-        for killer, v in pairs(BlockVisuals) do
+        task.wait(0.15)
+        for killer, v in pairs(GridVisuals) do
             if not killer.Parent then
                 if v.folder then pcall(function() v.folder:Destroy() end) end
-                BlockVisuals[killer] = nil
-            elseif os.clock() > v.expiresAt then
-                hideBlockVisual(v)
+                GridVisuals[killer] = nil
             end
         end
     end
@@ -1154,6 +1203,9 @@ local function fireBlock(killer)
     end
 end
 
+-- Track active block windows so grid follows ability
+local activeBlocks = {}
+
 local function checkKiller(killer)
     if not _G.AutoBlockEnabled then return end
     local char = LP.Character; if not char then return end
@@ -1168,11 +1220,41 @@ local function checkKiller(killer)
     local lastUsedInc = curLastUsed > st.lastUsed
     local usedInc = curUsed > st.used
     if usedInc then st.locked = true end
-    if lastUsedInc then
-        if st.locked then st.locked = false
+    if lastUsedInc and not st.locked then
+        -- Ability fired — start a 0.5s window where grid tracks the killer
+        activeBlocks[killer] = os.clock() + 0.5
+        local qh = killer:FindFirstChild("QueryHitbox")
+        if qh then
+            local size = Vector3.new(_G.BlockWidth, _G.BlockHeight, _G.BlockLength)
+            local params = OverlapParams.new()
+            params.FilterType = Enum.RaycastFilterType.Include
+            params.FilterDescendantsInstances = { char }
+            local hits = Workspace:GetPartBoundsInBox(qh.CFrame * CFrame.new(0, 0, _G.BlockOffset), size, params)
+            if #hits > 0 then fireBlock(killer) end
+        end
+    end
+    if lastUsedInc and st.locked then st.locked = false end
+    st.lastUsed = curLastUsed
+    st.used = curUsed
+end
+
+-- Update grid every frame for active blocks
+RunService.RenderStepped:Connect(function()
+    if not _G.AutoBlockEnabled then
+        for _, v in pairs(GridVisuals) do hideGrid(v) end
+        return
+    end
+    local char = LP.Character
+    if not char then return end
+    local now = os.clock()
+    for killer, expiresAt in pairs(activeBlocks) do
+        if now > expiresAt or not killer.Parent then
+            activeBlocks[killer] = nil
+            local v = GridVisuals[killer]
+            if v then v.expiresAt = now end
         else
             local qh = killer:FindFirstChild("QueryHitbox")
-            if qh then
+            if qh and _G.BlockShowBox then
                 local size = Vector3.new(_G.BlockWidth, _G.BlockHeight, _G.BlockLength)
                 local cf = qh.CFrame * CFrame.new(0, 0, _G.BlockOffset)
                 local params = OverlapParams.new()
@@ -1180,19 +1262,19 @@ local function checkKiller(killer)
                 params.FilterDescendantsInstances = { char }
                 local hits = Workspace:GetPartBoundsInBox(cf, size, params)
                 local overlapping = #hits > 0
-                if _G.BlockShowBox then
-                    local v = getOrCreateBlockVisual(killer)
-                    local color = overlapping and Color3.fromRGB(80, 255, 80) or Color3.fromRGB(255, 60, 60)
-                    updateBlockVisual(v, cf, size, color)
-                    v.expiresAt = os.clock() + 0.35
-                end
-                if overlapping then fireBlock(killer) end
+                local v = getOrCreateGrid(killer)
+                local color = overlapping and Color3.fromRGB(80, 255, 80) or Color3.fromRGB(255, 60, 60)
+                updateGrid(v, cf, size, color)
+                v.expiresAt = now + 0.1
             end
         end
     end
-    st.lastUsed = curLastUsed
-    st.used = curUsed
-end
+    -- Fade out expired grids
+    for killer, v in pairs(GridVisuals) do
+        if now > v.expiresAt + 0.1 then hideGrid(v) end
+    end
+end)
+
 RunService.Heartbeat:Connect(function()
     if not _G.AutoBlockEnabled then return end
     local kf = Workspace:FindFirstChild("Players") and Workspace.Players:FindFirstChild("Killers")
@@ -1206,6 +1288,7 @@ local BlockLeft = Tabs.Block:AddLeftGroupbox("Auto Block", "shield")
 BlockLeft:AddToggle("AutoBlockToggle", { Text = "Enable AutoBlock", Default = false, Callback = function(state)
     _G.AutoBlockEnabled = state
     blockPerKiller = {}
+    activeBlocks = {}
     lastBlockTime = 0
 end })
 BlockLeft:AddSlider("Block_Width",  { Text = "Width (X)",  Default = 11.44, Min = 1, Max = 40, Rounding = 2, Callback = function(v) _G.BlockWidth = v end })
@@ -1223,7 +1306,7 @@ BlockRight:AddButton("Force HDT Now", function()
     local k = hdtNearest(); if k then hdtDash(k) end
 end)
 
---═══ STAB ═══
+--═══ STAB TAB ═══
 local TARGET_ANIMATION_ID = "100725497418533"
 local DASHSTAB_ANIM_ID = "89448354637442"
 local stabEnabledBackstab = false
@@ -1307,7 +1390,7 @@ StabRight:AddSlider("BackstabDelay", { Text = "Backstab Start Delay", Default = 
 StabRight:AddSlider("BackstabDuration", { Text = "Backstab Duration", Default = 0.5, Min = 0.1, Max = 2, Rounding = 2, Callback = function(v) backstabDuration = v end })
 StabRight:AddSlider("DashstabDelay", { Text = "Dashstab Start Delay", Default = 0.25, Min = 0, Max = 0.5, Rounding = 2, Callback = function(v) dashstabDelay = v end })
 
---═══ SK8 ═══
+--═══ SK8 TAB ═══
 do
     local Sk8Player = LP
     local Sk8Workspace = Workspace
@@ -1536,7 +1619,7 @@ do
 end
 
 --═══ UI SETTINGS ═══
-local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu", "sliders")
+local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu", "settings")
 MenuGroup:AddToggle("KeybindMenuOpen", { Default = Library.KeybindFrame.Visible, Text = "Open Keybind Menu", Callback = function(value) Library.KeybindFrame.Visible = value end })
 MenuGroup:AddToggle("ShowCustomCursor", { Text = "Custom Cursor", Default = false, Callback = function(Value) Library.ShowCustomCursor = Value end })
 MenuGroup:AddDropdown("NotificationSide", { Values = { "Left", "Right" }, Default = "Right", Text = "Notification Side", Callback = function(Value) Library:SetNotifySide(Value) end })
@@ -1557,6 +1640,6 @@ SaveManager:BuildConfigSection(Tabs["UI Settings"])
 SaveManager:LoadAutoloadConfig()
 Library:OnUnload(function()
     for _, conn in ipairs(triggerConnections) do pcall(function() conn:Disconnect() end) end
-    for killer, v in pairs(BlockVisuals) do if v.folder then pcall(function() v.folder:Destroy() end) end end
+    for _, v in pairs(GridVisuals) do if v.folder then pcall(function() v.folder:Destroy() end) end end
     print("Cupcake Hub unloaded!")
 end)
