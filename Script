@@ -396,9 +396,14 @@ local function UpdateESP()
     end
 end
 task.spawn(function() while task.wait(0.5) do pcall(UpdateESP) end end)
-RunService.RenderStepped:Connect(function()
-    for _, d in ipairs(PlayerESPData) do pcall(applyESPText, d) end
+
+-- LIGHTWEIGHT: throttled text updates (0.15s instead of every frame)
+task.spawn(function()
+    while task.wait(0.15) do
+        for _, d in ipairs(PlayerESPData) do pcall(applyESPText, d) end
+    end
 end)
+
 function EspLib:UpdateAllPlayerText()
     for _, d in ipairs(PlayerESPData) do pcall(applyESPText, d) end
 end
@@ -610,7 +615,6 @@ local function registerTriggerModule(name, enableFunc, disableFunc)
     modules[name] = { enabled = false, enable = enableFunc, disable = disableFunc }
 end
 
--- FIXED: handles nil enable/disable
 local function toggleModule(name, state)
     local mod = modules[name]; if not mod then return end
     if state and not mod.enabled then
@@ -695,7 +699,7 @@ local function executeAim()
     activeAimConnection = conn
 end
 
---═══ KILLER AIM (animation-based, kept as-is) ═══
+--═══ KILLER AIM (animation-based) ═══
 local function createAnimationTrigger(moduleName, animIds, targetType, useCamera)
     local isActive = false
     local animConn = nil
@@ -784,15 +788,34 @@ local function createAnimationTrigger(moduleName, animIds, targetType, useCamera
     registerTriggerModule(moduleName, enable, disable)
 end
 
---═══ SURVIVOR AIM (button-based, no animation IDs) ═══
-local function isPlayerKiller()
-    local kf = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
-    local lp = game.Players.LocalPlayer
-    if not kf or not lp.Character then return false end
-    for _, k in ipairs(kf:GetChildren()) do
-        if k == lp.Character then return true end
+--═══ SURVIVOR AIM (button-based, FRAME-LOCKED) ═══
+local activeSnapConn = nil
+local activeSnapHum = nil
+local activeSnapWasAuto = true
+
+local function findClosestTargetHRP(targetType, excludeChar, fromPos, maxDist)
+    local folder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild(targetType)
+    if not folder then return nil end
+    local best, bd = nil, maxDist
+    for _, model in ipairs(folder:GetChildren()) do
+        if model:IsA("Model") and model ~= excludeChar then
+            local trg = model:FindFirstChild("HumanoidRootPart")
+            local h = model:FindFirstChildOfClass("Humanoid")
+            if trg and h and h.Health > 0 then
+                local d = (trg.Position - fromPos).Magnitude
+                if d < bd then bd = d; best = trg end
+            end
+        end
     end
-    return false
+    return best
+end
+
+local function stopSnapLock()
+    if activeSnapConn then pcall(function() activeSnapConn:Disconnect() end); activeSnapConn = nil end
+    if activeSnapHum and activeSnapHum.Parent then
+        pcall(function() activeSnapHum.AutoRotate = activeSnapWasAuto end)
+    end
+    activeSnapHum = nil
 end
 
 local function performSnap(targetType, useCamera)
@@ -801,46 +824,49 @@ local function performSnap(targetType, useCamera)
     local hum = char:FindFirstChildOfClass("Humanoid")
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    local folder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild(targetType)
-    if not folder then return end
-    local closest, closestDist = nil, settings.distance
-    for _, model in ipairs(folder:GetChildren()) do
-        if model:IsA("Model") and model ~= char then
-            local trgHRP = model:FindFirstChild("HumanoidRootPart")
-            local h = model:FindFirstChildOfClass("Humanoid")
-            if trgHRP and h and h.Health > 0 then
-                local dist = (trgHRP.Position - hrp.Position).Magnitude
-                if dist < closestDist then closestDist = dist; closest = model end
-            end
-        end
-    end
-    if not closest then return end
-    local targetHRP = closest:FindFirstChild("HumanoidRootPart")
+
+    local targetHRP = findClosestTargetHRP(targetType, char, hrp.Position, settings.distance)
     if not targetHRP then return end
 
-    local rawPos = targetHRP.Position
-    local vel = targetHRP.AssemblyLinearVelocity or Vector3.zero
-    if vel.Magnitude > 60 then vel = vel.Unit * 60 end
-    local predictedPos = rawPos + vel * (settings.aimPrediction * 0.03)
+    stopSnapLock()
 
     if useCamera then
         local cam = workspace.CurrentCamera
-        if cam then cam.CFrame = CFrame.lookAt(cam.CFrame.Position, predictedPos) end
-    else
-        local direction = predictedPos - hrp.Position
-        local flatDir = Vector3.new(direction.X, 0, direction.Z)
-        if flatDir.Magnitude > 0.01 then
-            flatDir = flatDir.Unit
-            local newCF = CFrame.lookAt(hrp.Position, hrp.Position + flatDir)
-            local wasAuto = hum and hum.AutoRotate
-            if hum then hum.AutoRotate = false end
-            pcall(function() char:PivotTo(newCF) end)
-            pcall(function() hrp.CFrame = newCF end)
-            task.delay(0.15, function()
-                if hum and hum.Parent then hum.AutoRotate = wasAuto end
-            end)
+        local vel = targetHRP.AssemblyLinearVelocity or Vector3.zero
+        if vel.Magnitude > 60 then vel = vel.Unit * 60 end
+        local predicted = targetHRP.Position + vel * (settings.aimPrediction * 0.03)
+        if cam then cam.CFrame = CFrame.lookAt(cam.CFrame.Position, predicted) end
+        if hum then
+            activeSnapHum = hum
+            activeSnapWasAuto = hum.AutoRotate
+            hum.AutoRotate = false
+            task.delay(0.35, stopSnapLock)
         end
+        return
     end
+
+    if hum then
+        activeSnapHum = hum
+        activeSnapWasAuto = hum.AutoRotate
+        hum.AutoRotate = false
+    end
+    local startT = tick()
+    local lockDuration = 0.5
+    activeSnapConn = RunService.RenderStepped:Connect(function()
+        if not char.Parent or not hrp.Parent then stopSnapLock(); return end
+        if tick() - startT > lockDuration then stopSnapLock(); return end
+        local target = findClosestTargetHRP(targetType, char, hrp.Position, settings.distance)
+        if not target then return end
+        local vel = target.AssemblyLinearVelocity or Vector3.zero
+        if vel.Magnitude > 60 then vel = vel.Unit * 60 end
+        local predicted = target.Position + vel * (settings.aimPrediction * 0.03)
+        local dx = predicted.X - hrp.Position.X
+        local dz = predicted.Z - hrp.Position.Z
+        if dx * dx + dz * dz > 0.01 then
+            local len = math.sqrt(dx * dx + dz * dz)
+            hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(dx / len, 0, dz / len))
+        end
+    end)
 end
 
 local SurvivorButtonMap = {
@@ -894,7 +920,6 @@ local function bindAbilityButton(btn)
         task.spawn(performSnap, target, camera)
     end
 
-    -- Cooldown-text watcher (primary)
     local cd = btn:FindFirstChild("CooldownTime", true)
     if cd and cd:IsA("TextLabel") then
         local init = cd.Text
@@ -907,7 +932,6 @@ local function bindAbilityButton(btn)
         end)
     end
 
-    -- Click watcher (backup)
     local clickTarget = btn:IsA("GuiButton") and btn or btn:FindFirstChildWhichIsA("GuiButton", true) or btn
     if clickTarget and clickTarget.MouseButton1Down then
         clickTarget.MouseButton1Down:Connect(tryFire)
@@ -1082,7 +1106,7 @@ end
 registerTriggerModule("NoilStar", function() NoilStarAim(true) end, function() NoilStarAim(false) end)
 registerTriggerModule("NoilVoid", function() NoilVoidAim(true) end, function() NoilVoidAim(false) end)
 
--- Survivor aim modules (button-based, no enable/disable needed)
+-- Survivor modules (button-based)
 registerTriggerModule("Slash")
 registerTriggerModule("Punch")
 registerTriggerModule("Dagger")
@@ -1091,7 +1115,7 @@ registerTriggerModule("JaneDoeAxe")
 registerTriggerModule("Chance")
 registerTriggerModule("Dusekkar")
 
--- Killer aim modules (animation-based, kept intact)
+-- Killer modules (animation-based)
 createAnimationTrigger("1x4", { ["99050723653468"] = true, ["119181003138006"] = true }, "Survivors", false)
 createAnimationTrigger("C00kidd", { ["18885919947"] = true }, "Survivors", true)
 createAnimationTrigger("JohnDoe", { ["127172483138092"] = true }, "Survivors", true)
@@ -1127,7 +1151,7 @@ registerTriggerModule("SoundTrigger", function() soundTriggerEnabled = true; set
     if globalSoundConn then pcall(function() globalSoundConn:Disconnect() end); globalSoundConn = nil end
 end)
 
---═══ AIMBOT TAB — Survivor Aim ═══
+--═══ AIMBOT TAB ═══
 local generalGroup = Tabs.Aimbot:AddLeftGroupbox("General Aim", "crosshair")
 SafeUI("GAA_Distance", function()
     generalGroup:AddSlider("GAA_Distance", { Text = "Aim Distance", Default = settings.distance, Min = 10, Max = 500, Rounding = 1, Callback = function(v) settings.distance = v end })
@@ -1171,7 +1195,7 @@ SafeUI("DusekkarToggle", function()
     survivorAimGroup:AddToggle("DusekkarToggle", { Text = "Dusekkar Aim (Camera)", Default = false, Callback = function(v) toggleModule("Dusekkar", v) end })
 end)
 
---═══ KILLER TAB — Killer Aim ═══
+--═══ KILLER TAB ═══
 local killerAimGroup = Tabs.Killer:AddLeftGroupbox("Killer Aim (Animation-Based)", "crosshair")
 SafeUI("Onex4Toggle", function()
     killerAimGroup:AddToggle("Onex4Toggle", { Text = "1x4 Aim", Default = false, Callback = function(v) toggleModule("1x4", v) end })
@@ -1314,7 +1338,6 @@ local function getBlockRemote()
 end
 getBlockRemote()
 
--- HDT — original BodyGyro + BodyVelocity, no cooldown
 local HDT = { debounce = false, Speed = 40, Duration = 0.6, bindId = 0 }
 local HDT_Enabled = false
 
@@ -1824,5 +1847,6 @@ SaveManager:LoadAutoloadConfig()
 Library:OnUnload(function()
     for _, conn in ipairs(triggerConnections) do pcall(function() conn:Disconnect() end) end
     for _, v in pairs(ZoneVisuals) do if v.folder then pcall(function() v.folder:Destroy() end) end end
+    stopSnapLock()
     print("Cupcake Hub unloaded!")
 end)
