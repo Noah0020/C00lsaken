@@ -16,101 +16,38 @@ local Options = Library.Options
 local Toggles = Library.Toggles
 Library.ForceCheckbox = false
 Library.ShowToggleFrameInKeybinds = true
+
+-- Red theme applied first so it's the visible default
+ThemeManager:SetLibrary(Library)
+ThemeManager:SetDefaultTheme({
+    BackgroundColor = Color3.fromRGB(24, 8, 8),
+    AccentColor = Color3.fromRGB(230, 45, 45),
+    OutlineColor = Color3.fromRGB(95, 22, 22),
+    FontColor = Color3.fromRGB(255, 235, 235),
+    FontFace = Enum.Font.GothamMedium
+})
+
 local Window = Library:CreateWindow({
     Title = "Cupcake Hub",
     Footer = LP.Name .. " | " .. gameName,
     NotifySide = "Right",
-    ShowCustomCursor = true,
+    ShowCustomCursor = false,
     Icon = "rbxassetid://72996766218088"
 })
-local Tabs = {
-    ["Player Info"] = Window:AddTab("Player Info", "user"),
-    ["ESP"] = Window:AddTab("ESP", "eye"),
-    ["Generator"] = Window:AddTab("Generator", "zap"),
-    ["Player"] = Window:AddTab("Player", "user"),
-    ["Aimbot"] = Window:AddTab("Aimbot", "crosshair"),
-    ["Block"] = Window:AddTab("Block", "shield"),
-    ["Stab"] = Window:AddTab("Stab", "sword"),
-    ["Sk8"] = Window:AddTab("Sk8", "zap"),
-    ["Action"] = Window:AddTab("Action", "smile"),
-    ["Music"]  = Window:AddTab("Music", "music"),
-    ["Misc"] = Window:AddTab("Misc", "paperclip"),
-    ["UI Settings"] = Window:AddTab("UI Settings", "settings"),
-}
-local information = Tabs["Player Info"]:AddLeftGroupbox("Player", "user")
-local avatarImage = Instance.new("ImageLabel")
-avatarImage.Name = "AvatarThumbnail"
-avatarImage.Size = UDim2.new(0, 220, 0, 220)
-avatarImage.Position = UDim2.new(0.5, -90, 0, 10)
-avatarImage.Image = "rbxassetid://0"
-avatarImage.BackgroundTransparency = 1
-avatarImage.BorderSizePixel = 0
-avatarImage.ScaleType = Enum.ScaleType.Fit
-if information.Container then
-    avatarImage.Parent = information.Container
-elseif information.Frame then
-    avatarImage.Parent = information.Frame
-else
-    avatarImage.Parent = information
-end
-spawn(function()
-    local player = LP
-    if not player then repeat task.wait(0.1) player = Players.LocalPlayer until player end
-    task.wait(1)
-    local success, thumbnail = pcall(function()
-        return Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size180x180)
-    end)
-    if success and thumbnail then
-        avatarImage.Image = thumbnail
-    else
-        local alternatives = {Enum.ThumbnailType.AvatarThumbnail, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailType.Avatar}
-        for i, thumbnailType in ipairs(alternatives) do
-            local altSuccess, altThumbnail = pcall(function()
-                return Players:GetUserThumbnailAsync(player.UserId, thumbnailType, Enum.ThumbnailSize.Size180x180)
-            end)
-            if altSuccess and altThumbnail then avatarImage.Image = altThumbnail break end
-        end
-    end
-end)
-information:AddLabel("Executor : " .. identifyexecutor())
-information:AddLabel("Username : " .. game.Players.LocalPlayer.Name)
-information:AddLabel("User ID : " .. game.Players.LocalPlayer.UserId)
-information:AddLabel("Display Name : " .. game.Players.LocalPlayer.DisplayName)
-information:AddLabel("Account Age : " .. game.Players.LocalPlayer.AccountAge .. " days")
-local InfoGroup = Tabs["Player Info"]:AddRightGroupbox("Info", "info")
-local welcomeLabel = InfoGroup:AddLabel({Text = "Welcome to Cupcake Hub", DoesWrap = true})
-task.spawn(function()
-    while true do
-        task.wait(0.1)
-        local accentColor = ThemeManager.ThemeData.AccentColor or Color3.fromRGB(137, 180, 250)
-        local fullText = 'Welcome to <font color="#' .. string.format("%02x%02x%02x",
-            math.floor(accentColor.R * 255), math.floor(accentColor.G * 255), math.floor(accentColor.B * 255)) .. '">Cupcake Hub</font>'
-        welcomeLabel:SetText(fullText)
-        if Library.Unloaded then break end
-    end
-end)
-local DevGroup = Tabs["Player Info"]:AddRightGroupbox("Developer", "user")
-DevGroup:AddLabel("[FixFox] - Owner And Developer")
-local ContributorGroup = Tabs["Player Info"]:AddRightGroupbox("Contributor", "users")
-ContributorGroup:AddLabel("[Yuxingchen] - [Contribution and Guidance]")
-ContributorGroup:AddLabel("[Fixed] - Tester")
-ContributorGroup:AddLabel("[777] - Tester")
-ContributorGroup:AddLabel("[yeye] - Tester")
-ContributorGroup:AddLabel("[TUNG_SAHUR] - Publicist")
-local CommunityGroup = Tabs["Player Info"]:AddRightGroupbox("Community", "users")
-CommunityGroup:AddButton("Copy Discord Link", function()
-    pcall(function()
-        setclipboard("https://discord.gg/F4wrAGnRgF")
-        Library:Notify({Title = "Discord", Description = "Link copied to clipboard", Time = 2})
-    end)
-end)
-CommunityGroup:AddButton("QQ", function()
-    pcall(function()
-        setclipboard("1058111379")
-        Library:Notify({Title = "QQ", Description = "QQ number copied to clipboard", Time = 2})
-    end)
-end)
 
+local Tabs = {
+    ["ESP"]         = Window:AddTab("ESP", "scan"),
+    ["Generator"]   = Window:AddTab("Generator", "cpu"),
+    ["Aimbot"]      = Window:AddTab("Aimbot", "crosshair"),
+    ["Killer"]      = Window:AddTab("Killer", "target"),
+    ["Block"]       = Window:AddTab("Block", "shield"),
+    ["Stab"]        = Window:AddTab("Stab", "sword"),
+    ["Sk8"]         = Window:AddTab("Sk8", "activity"),
+    ["Player"]      = Window:AddTab("Player", "heart"),
+    ["UI Settings"] = Window:AddTab("UI Settings", "sliders"),
+}
+
+--═══ ESP ═══
 local EspLib = {}
 local Camera = Workspace.CurrentCamera
 local MapFolder = nil
@@ -203,7 +140,7 @@ local function createPlayerESP(model, color, isKiller)
     nameLabel.Position = UDim2.new(0, 0, 0, 0)
     nameLabel.BackgroundTransparency = 1
     nameLabel.Text = "Loading..."
-    nameLabel.Font = Enum.Font.Jura
+    nameLabel.Font = Enum.Font.GothamMedium
     nameLabel.TextColor3 = color
     nameLabel.TextSize = 8
     nameLabel.TextStrokeTransparency = 0.6
@@ -213,7 +150,7 @@ local function createPlayerESP(model, color, isKiller)
     hpLabel.Position = UDim2.new(0, 0, 0.4, 0)
     hpLabel.BackgroundTransparency = 1
     hpLabel.Text = "HP: N/A"
-    hpLabel.Font = Enum.Font.Jura
+    hpLabel.Font = Enum.Font.GothamMedium
     hpLabel.TextColor3 = color
     hpLabel.TextSize = 8
     hpLabel.TextStrokeTransparency = 0.6
@@ -313,13 +250,12 @@ local function CreateObjectESP(model, color, isGenerator, isItem, isPizza, isPiz
             textLabel.Text = model.Name
         end
     end
-    textLabel.Font = Enum.Font.Jura
+    textLabel.Font = Enum.Font.GothamMedium
     textLabel.TextColor3 = color
     textLabel.TextSize = 8
     textLabel.TextStrokeTransparency = 0.6
     textLabel.Parent = billboard
-    local espData = {model = model, highlight = highlight, billboard = billboard}
-    table.insert(ObjectESPData, espData)
+    table.insert(ObjectESPData, {model = model, highlight = highlight, billboard = billboard})
 end
 local function RemoveObjectESP(model)
     if not model then return end
@@ -469,12 +405,12 @@ function EspLib:UpdateAllPlayerText()
         end
     end
 end
-local KillerGroup = Tabs.ESP:AddLeftGroupbox("Killer", "user")
+local KillerGroup = Tabs.ESP:AddLeftGroupbox("Killer", "crosshair")
 local SurvivorGroup = Tabs.ESP:AddLeftGroupbox("Survivor", "user")
-local ItemGroup = Tabs.ESP:AddRightGroupbox("Items", "box")
-local SpecialGroup = Tabs.ESP:AddRightGroupbox("Special", "alert")
-local TracerGroup = Tabs.ESP:AddRightGroupbox("Tracers", "line")
-local NameToggleGroup = Tabs.ESP:AddRightGroupbox("Names", "font")
+local ItemGroup = Tabs.ESP:AddRightGroupbox("Objects", "package")
+local SpecialGroup = Tabs.ESP:AddRightGroupbox("Special", "zap")
+local TracerGroup = Tabs.ESP:AddRightGroupbox("Tracers", "activity")
+local NameToggleGroup = Tabs.ESP:AddRightGroupbox("Names", "type")
 KillerGroup:AddToggle("KillerESP", { Text = "Killer ESP", Default = false, Callback = function(Value) ESPSettings.killerESP = Value end })
 KillerGroup:AddToggle("KillerNameESP", { Text = "Show Killer Name", Default = true, Callback = function(Value) ESPSettings.killerNameESP = Value; EspLib:UpdateAllPlayerText() end })
 KillerGroup:AddToggle("KillerHealthESP", { Text = "Show Killer Health", Default = true, Callback = function(Value) ESPSettings.killerHealthESP = Value; EspLib:UpdateAllPlayerText() end })
@@ -518,6 +454,7 @@ NameToggleGroup:AddToggle("ShowTripMineName", { Text = "Show Mine Name", Default
 NameToggleGroup:AddToggle("ShowTwoTimeRespawnName", { Text = "Show Respawn Name", Default = true, Callback = function(Value) ESPSettings.showTwoTimeRespawnName = Value end })
 NameToggleGroup:AddToggle("ShowGraffitiName", { Text = "Show Graffiti Name", Default = true, Callback = function(Value) ESPSettings.showGraffitiName = Value end })
 
+--═══ GENERATOR ═══
 local flow = { on = false, nodeDelay = 0.04 }
 local function flowKey(n) return n.row .. "-" .. n.col end
 local function flowNeighbour(r1, c1, r2, c2)
@@ -603,76 +540,13 @@ do
         end
     end)
 end
-local genLeft = Tabs.Generator:AddLeftGroupbox("Auto Solve", "zap")
+local genLeft = Tabs.Generator:AddLeftGroupbox("Auto Solve", "cpu")
 genLeft:AddToggle("FlowAutoSolve", { Text = "Auto Solve", Default = flow.on, Callback = function(Value) flow.on = Value end })
 local genRight = Tabs.Generator:AddRightGroupbox("Settings", "sliders")
 genRight:AddSlider("FlowSpeed", { Text = "Auto Solve Speed", Default = flow.nodeDelay, Min = 0.01, Max = 0.50, Rounding = 2, Compact = false, Callback = function(Value) flow.nodeDelay = Value end })
 
-local SpeedGroup = Tabs.Player:AddLeftGroupbox("Speed", "bolt")
-local FlightGroup = Tabs.Player:AddLeftGroupbox("Flight", "plane")
-local speedEnabled = false
-local speedValue = 16
-SpeedGroup:AddToggle("SpeedToggle", { Text = "Enable Speed", Default = false, Callback = function(v)
-    speedEnabled = v
-    if v then
-        task.spawn(function()
-            while speedEnabled do
-                local char = LP.Character
-                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-                if humanoid and humanoid.MoveDirection.Magnitude > 0 then
-                    char:TranslateBy(humanoid.MoveDirection * speedValue * RunService.RenderStepped:Wait())
-                end
-                task.wait()
-            end
-        end)
-    end
-end })
-SpeedGroup:AddSlider("SpeedValue", { Text = "Speed", Default = 16, Min = 1, Max = 500, Rounding = 0, Callback = function(v) speedValue = v end })
-local flightEnabled = false
-local flightSpeed = 50
-local flightLoop = nil
-local function startFlight()
-    local char = LP.Character
-    if not char then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    local head = char:FindFirstChild("Head")
-    if not humanoid or not head then return end
-    humanoid.PlatformStand = true
-    head.Anchored = true
-    if flightLoop then flightLoop:Disconnect() end
-    flightLoop = RunService.Heartbeat:Connect(function(dt)
-        if not char or not char.Parent then
-            if flightLoop then flightLoop:Disconnect(); flightLoop = nil end
-            return
-        end
-        local md = humanoid.MoveDirection * (flightSpeed * dt)
-        local cam = Workspace.CurrentCamera
-        local headCF = head.CFrame
-        local camCF = cam.CFrame
-        local off = headCF:ToObjectSpace(camCF).Position
-        camCF = camCF * CFrame.new(-off.X, -off.Y, -off.Z + 1)
-        local cp = camCF.Position
-        local hp = headCF.Position
-        local ov = CFrame.new(cp, Vector3.new(hp.X, cp.Y, hp.Z)):VectorToObjectSpace(md)
-        head.CFrame = CFrame.new(hp) * (camCF - cp) * CFrame.new(ov)
-    end)
-end
-local function stopFlight()
-    if flightLoop then flightLoop:Disconnect(); flightLoop = nil end
-    local char = LP.Character
-    if char then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local head = char:FindFirstChild("Head")
-        if humanoid then humanoid.PlatformStand = false end
-        if head then head.Anchored = false end
-    end
-end
-FlightGroup:AddToggle("FlightToggle", { Text = "Enable Flight", Default = false, Callback = function(v)
-    flightEnabled = v
-    if v then startFlight() else stopFlight() end
-end })
-FlightGroup:AddSlider("FlightSpeed", { Text = "Flight Speed", Default = 50, Min = 1, Max = 200, Rounding = 0, Callback = function(v) flightSpeed = v end })
-local StaminaTabbox = Tabs.Player:AddRightTabbox()
+--═══ PLAYER (Stamina only, Speed/Flight removed) ═══
+local StaminaTabbox = Tabs.Player:AddLeftTabbox()
 local MVP = StaminaTabbox:AddTab("Stamina")
 local MVP2 = StaminaTabbox:AddTab("Settings")
 local SprintingModule = ReplicatedStorage:WaitForChild("Systems"):WaitForChild("Character"):WaitForChild("Game"):WaitForChild("Sprinting")
@@ -729,222 +603,32 @@ MVP2:AddSlider("StaminaLossSlider", { Text = "Stamina Loss Speed", Default = 10,
     if SettingToggles.StaminaLoss and not bai.Spr then GetModule().StaminaLoss = v end
 end })
 
-local ExtraGroup = Tabs.Player:AddRightGroupbox("Extra", "plus")
-local deleteFakeNoli = false
-task.spawn(function()
-    while true do
-        task.wait(0.2)
-        if not deleteFakeNoli then continue end
-        local killers = Workspace:FindFirstChild("Players") and Workspace.Players:FindFirstChild("Killers")
-        if killers then
-            for _, model in pairs(killers:GetChildren()) do
-                if model:IsA("Model") and model:GetAttribute("IsFakeNoli") == true then model:Destroy() end
-            end
-        end
-    end
-end)
-ExtraGroup:AddToggle("DeleteFakeNoli", { Text = "Delete Fake Noli", Default = false, Callback = function(v) deleteFakeNoli = v end })
-local dashTurnConn = nil
-local function getInputDirection()
-    local cf = Workspace.CurrentCamera.CFrame
-    local fwd = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z).Unit
-    local right = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z).Unit
-    local x, z = 0, 0
-    if UserInputService:IsKeyDown(Enum.KeyCode.W) then z = z - 1 end
-    if UserInputService:IsKeyDown(Enum.KeyCode.S) then z = z + 1 end
-    if UserInputService:IsKeyDown(Enum.KeyCode.A) then x = x - 1 end
-    if UserInputService:IsKeyDown(Enum.KeyCode.D) then x = x + 1 end
-    local dir = fwd * -z + right * x
-    return dir.Magnitude > 0.01 and dir.Unit or fwd
-end
-local function enableDashTurn()
-    if dashTurnConn then return end
-    dashTurnConn = RunService.RenderStepped:Connect(function(dt)
-        local char = LP.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not char or not hrp or char.Name ~= "c00lkidd" then return end
-        if char:GetAttribute("FootstepsMuted") ~= true then return end
-        local dir = getInputDirection()
-        local lv = hrp:FindFirstChildWhichIsA("LinearVelocity")
-        if lv then lv.LineDirection = dir end
-        if dir.Magnitude > 0.01 then
-            local targetRot = CFrame.new(hrp.Position, hrp.Position + dir).Rotation
-            hrp.CFrame = CFrame.new(hrp.Position) * hrp.CFrame.Rotation:Lerp(targetRot, math.min(dt * 16, 1))
-        end
-    end)
-end
-local function disableDashTurn()
-    if dashTurnConn then dashTurnConn:Disconnect(); dashTurnConn = nil end
-end
-ExtraGroup:AddToggle("C00lkiddDashTurn", { Text = "c00lkidd Dash Turn", Default = false, Callback = function(v) if v then enableDashTurn() else disableDashTurn() end end })
-local breakFreeTask = nil
-local anti_breakFree = false
-local function startBreakFree()
-    if breakFreeTask then return end
-    breakFreeTask = task.spawn(function()
-        while true do
-            if not anti_breakFree then break end
-            local tui = LP.PlayerGui:FindFirstChild("TemporaryUI")
-            if tui and tui:FindFirstChild("QTE") then
-                local killers = Workspace:FindFirstChild("Players") and Workspace.Players:FindFirstChild("Killers")
-                if killers then
-                    for _, k in ipairs(killers:GetChildren()) do
-                        if k:IsA("Model") and k.Name == "Nosferatu" then
-                            local un = k:GetAttribute("Username")
-                            if un and un ~= LP.Name then
-                                pcall(function()
-                                    ReplicatedStorage.Modules.Network.Network.RemoteEvent:FireServer(un .. "NosHookQTE", {buffer.fromstring("\x01\x01")})
-                                end)
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-            task.wait(0.1)
-        end
-    end)
-end
-local function stopBreakFree()
-    if breakFreeTask then task.cancel(breakFreeTask); breakFreeTask = nil end
-end
-ExtraGroup:AddToggle("AutoBreakFree", { Text = "Auto Break Free", Default = false, Callback = function(v)
-    anti_breakFree = v
-    if v then startBreakFree() else stopBreakFree() end
-end })
-local pullRopeTask = nil
-local anti_pullRope = false
-local function startPullRope()
-    if pullRopeTask then return end
-    pullRopeTask = task.spawn(function()
-        while true do
-            if not anti_pullRope then break end
-            local killers = Workspace:FindFirstChild("Players") and Workspace.Players:FindFirstChild("Killers")
-            local isNos = false
-            if killers then
-                for _, k in ipairs(killers:GetChildren()) do
-                    if k:IsA("Model") and k.Name == "Nosferatu" then
-                        local un = k:GetAttribute("Username")
-                        if un == LP.Name then isNos = true break end
-                    end
-                end
-            end
-            if isNos then
-                local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
-                if hum then
-                    for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-                        local animId = track.Animation and track.Animation.AnimationId
-                        if animId then
-                            local id = animId:match("%d+")
-                            if id == "113403615979705" then
-                                pcall(function()
-                                    ReplicatedStorage.Modules.Network.Network.RemoteEvent:FireServer(LP.Name .. "NosHookQTE", {buffer.fromstring("\x01\x01")})
-                                end)
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-            task.wait(0.1)
-        end
-    end)
-end
-local function stopPullRope()
-    if pullRopeTask then task.cancel(pullRopeTask); pullRopeTask = nil end
-end
-ExtraGroup:AddToggle("AutoPullRope", { Text = "Auto Pull Rope", Default = false, Callback = function(v)
-    anti_pullRope = v
-    if v then startPullRope() else stopPullRope() end
-end })
-local azureQTEEnabled = false
-local originalGetHitZoneIndex = nil
-local hookSlot = nil
-local function enableQTE()
-    if azureQTEEnabled then return end
-    azureQTEEnabled = true
-    local BehaviorModule = ReplicatedStorage:FindFirstChild("Assets")
-        and ReplicatedStorage.Assets:FindFirstChild("Killers")
-        and ReplicatedStorage.Assets.Killers:FindFirstChild("Azure")
-        and ReplicatedStorage.Assets.Killers.Azure:FindFirstChild("Config")
-        and ReplicatedStorage.Assets.Killers.Azure.Config:FindFirstChild("cl_WorkaroundModules")
-        and ReplicatedStorage.Assets.Killers.Azure.Config.cl_WorkaroundModules:FindFirstChild("cl_ConstructQTE")
-    if not BehaviorModule then
-        Library:Notify({ Title = "QTE Error", Description = "QTE module not found", Time = 3 })
-        return
-    end
-    local Behavior
-    pcall(function() Behavior = require(BehaviorModule) end)
-    if not Behavior or not Behavior.new then return end
-    local function cheatGetHitZoneIndex(currentValue, qteBounds, completedZones)
-        if type(completedZones) == "table" then
-            for i = 1, 3 do
-                if not completedZones[i] then return i end
-            end
-        end
-        return 1
-    end
-    local upvalues = debug.getupvalues(Behavior.new)
-    for slot, value in pairs(upvalues) do
-        if type(value) == "function" and debug.info(value, "a") == 3 then
-            originalGetHitZoneIndex = value
-            hookSlot = slot
-            debug.setupvalue(Behavior.new, slot, cheatGetHitZoneIndex)
-            Library:Notify({ Title = "QTE", Description = "Auto QTE hooked", Time = 2 })
-            return
-        end
-    end
-    Library:Notify({ Title = "QTE Error", Description = "No 3-param func in upvalues", Time = 3 })
-end
-local function disableQTE()
-    azureQTEEnabled = false
-    if hookSlot and originalGetHitZoneIndex then
-        local BehaviorModule = ReplicatedStorage:FindFirstChild("Assets")
-            and ReplicatedStorage.Assets:FindFirstChild("Killers")
-            and ReplicatedStorage.Assets.Killers:FindFirstChild("Azure")
-            and ReplicatedStorage.Assets.Killers.Azure:FindFirstChild("Config")
-            and ReplicatedStorage.Assets.Killers.Azure.Config:FindFirstChild("cl_WorkaroundModules")
-            and ReplicatedStorage.Assets.Killers.Azure.Config.cl_WorkaroundModules:FindFirstChild("cl_ConstructQTE")
-        if BehaviorModule then
-            local Behavior
-            pcall(function() Behavior = require(BehaviorModule) end)
-            if Behavior and Behavior.new then
-                debug.setupvalue(Behavior.new, hookSlot, originalGetHitZoneIndex)
-            end
-        end
-        hookSlot = nil
-        originalGetHitZoneIndex = nil
-    end
-end
-ExtraGroup:AddToggle("AzureAutoQTE", {
-    Text = "Auto Azure QTE",
-    Default = false,
-    Callback = function(val)
-        if val then enableQTE() else disableQTE() end
-    end
-})
-
-local generalGroup = Tabs.Aimbot:AddLeftGroupbox("General Aim")
-local survivorGroup = Tabs.Aimbot:AddLeftGroupbox("Killer Aim")
-local killerGroup = Tabs.Aimbot:AddRightGroupbox("Survivor Aim")
-local settings = { distance = 100, smoothness = 20, duration = 50, targetPath = "auto", globalSound = false, silentAim = false, janeDoe = false, janeDoeAxe = false, chance = false, dusekkar = false, onex4 = false, cookidd = false, noilStar = false, noilVoid = false, punch = false }
+--═══ AIMBOT (General + Survivor Aim) ═══
+local generalGroup = Tabs.Aimbot:AddLeftGroupbox("General Aim", "crosshair")
+local survivorAimGroup = Tabs.Aimbot:AddRightGroupbox("Survivor Aim", "user")
+local settings = { distance = 100, smoothness = 20, duration = 50, targetPath = "auto", globalSound = false, silentAim = false }
 pcall(function() generalGroup:AddSlider("GAA_Distance", { Text = "Aim Distance", Default = settings.distance, Min = 10, Max = 500, Rounding = 1, Callback = function(v) settings.distance = v end }) end)
 pcall(function() generalGroup:AddSlider("GAA_Smoothness", { Text = "Camera Smoothness", Default = settings.smoothness, Min = 0, Max = 100, Rounding = 1, Callback = function(v) settings.smoothness = v end }) end)
 pcall(function() generalGroup:AddSlider("GAA_Duration", { Text = "Lock Duration", Default = settings.duration, Min = 1, Max = 200, Rounding = 1, Callback = function(v) settings.duration = v end }) end)
 pcall(function() generalGroup:AddTextbox("GAA_TargetPath", { Text = "Target Path (leave empty for auto)", Default = "", Placeholder = "e.g. workspace.Players", Callback = function(v) settings.targetPath = (v ~= "" and v) or "auto" end }) end)
 pcall(function() generalGroup:AddToggle("SilentAimToggle", { Text = "Silent Aim (Killer)", Default = false, Callback = function(v) toggleModule("SilentAim", v) end }) end)
 pcall(function() generalGroup:AddToggle("SoundTriggerToggle", { Text = "Sound Trigger Aim", Default = false, Callback = function(v) toggleModule("SoundTrigger", v) end }) end)
-pcall(function() survivorGroup:AddToggle("Onex4Toggle", { Text = "1x4 Aim", Default = false, Callback = function(v) toggleModule("1x4", v) end }) end)
-pcall(function() survivorGroup:AddToggle("CookiddToggle", { Text = "C00kidd Aim (Camera)", Default = false, Callback = function(v) toggleModule("C00kidd", v) end }) end)
-pcall(function() survivorGroup:AddToggle("JohnDoeToggle", { Text = "John Doe Aim (Camera)", Default = false, Callback = function(v) toggleModule("JohnDoe", v) end }) end)
-pcall(function() survivorGroup:AddToggle("NosferatuToggle", { Text = "Nosferatu Aim (Camera)", Default = false, Callback = function(v) toggleModule("Nosferatu", v) end }) end)
-pcall(function() survivorGroup:AddToggle("NoilStarToggle", { Text = "Noil Star Bomb Aim", Default = false, Callback = function(v) toggleModule("NoilStar", v) end }) end)
-pcall(function() survivorGroup:AddToggle("NoilVoidToggle", { Text = "Noil Void Rush Aim", Default = false, Callback = function(v) toggleModule("NoilVoid", v) end }) end)
-pcall(function() killerGroup:AddToggle("JaneDoeToggle", { Text = "Jane Doe Aim", Default = false, Callback = function(v) toggleModule("JaneDoe", v) end }) end)
-pcall(function() killerGroup:AddToggle("JaneDoeAxeToggle", { Text = "Jane Doe Axe Aim", Default = false, Callback = function(v) toggleModule("JaneDoeAxe", v) end }) end)
-pcall(function() killerGroup:AddToggle("ChanceToggle", { Text = "Chance Aim", Default = false, Callback = function(v) toggleModule("Chance", v) end }) end)
-pcall(function() killerGroup:AddToggle("DusekkarToggle", { Text = "Dusekkar Aim (Camera)", Default = false, Callback = function(v) toggleModule("Dusekkar", v) end }) end)
-pcall(function() killerGroup:AddToggle("PunchToggle", { Text = "Punch Aim", Default = false, Callback = function(v) toggleModule("Punch", v) end }) end)
+pcall(function() survivorAimGroup:AddToggle("Onex4Toggle", { Text = "1x4 Aim", Default = false, Callback = function(v) toggleModule("1x4", v) end }) end)
+pcall(function() survivorAimGroup:AddToggle("CookiddToggle", { Text = "C00kidd Aim (Camera)", Default = false, Callback = function(v) toggleModule("C00kidd", v) end }) end)
+pcall(function() survivorAimGroup:AddToggle("JohnDoeToggle", { Text = "John Doe Aim (Camera)", Default = false, Callback = function(v) toggleModule("JohnDoe", v) end }) end)
+pcall(function() survivorAimGroup:AddToggle("NosferatuToggle", { Text = "Nosferatu Aim (Camera)", Default = false, Callback = function(v) toggleModule("Nosferatu", v) end }) end)
+pcall(function() survivorAimGroup:AddToggle("NoilStarToggle", { Text = "Noil Star Bomb Aim", Default = false, Callback = function(v) toggleModule("NoilStar", v) end }) end)
+pcall(function() survivorAimGroup:AddToggle("NoilVoidToggle", { Text = "Noil Void Rush Aim", Default = false, Callback = function(v) toggleModule("NoilVoid", v) end }) end)
+
+--═══ KILLER (Killer Aim moved here) ═══
+local killerAimGroup = Tabs.Killer:AddLeftGroupbox("Killer Aim", "target")
+pcall(function() killerAimGroup:AddToggle("JaneDoeToggle", { Text = "Jane Doe Aim", Default = false, Callback = function(v) toggleModule("JaneDoe", v) end }) end)
+pcall(function() killerAimGroup:AddToggle("JaneDoeAxeToggle", { Text = "Jane Doe Axe Aim", Default = false, Callback = function(v) toggleModule("JaneDoeAxe", v) end }) end)
+pcall(function() killerAimGroup:AddToggle("ChanceToggle", { Text = "Chance Aim", Default = false, Callback = function(v) toggleModule("Chance", v) end }) end)
+pcall(function() killerAimGroup:AddToggle("DusekkarToggle", { Text = "Dusekkar Aim (Camera)", Default = false, Callback = function(v) toggleModule("Dusekkar", v) end }) end)
+pcall(function() killerAimGroup:AddToggle("PunchToggle", { Text = "Punch Aim", Default = false, Callback = function(v) toggleModule("Punch", v) end }) end)
+
+-- Aimbot core
 local function getTargetsFromPath(pathString)
     if pathString == "auto" then return nil end
     local parts = {}
@@ -1282,7 +966,7 @@ registerTriggerModule("SoundTrigger", function() soundTriggerEnabled = true; set
     if globalSoundConn then globalSoundConn:Disconnect(); globalSoundConn = nil end
 end)
 
---═══ CUPCAKE BLOCK + HDT (replaces V2's Block section) ═══
+--═══ BLOCK + HDT ═══
 local BLOCK_COOLDOWN = 27
 local lastBlockTime = 0
 local blockPerKiller = {}
@@ -1454,7 +1138,7 @@ BlockLeft:AddToggle("Block_ShowBox", { Text = "Show Debug Box", Default = true, 
 BlockLeft:AddSlider("Block_Transp", { Text = "Transparency", Default = 0.5, Min = 0, Max = 1, Rounding = 2, Callback = function(v) _G.BlockTransparency = v end })
 BlockLeft:AddLabel("Hitbox Color"):AddColorPicker("BlockColor", { Default = _G.BlockColor, Title = "Hitbox Color", Callback = function(c) _G.BlockColor = c end })
 
-local BlockRight = Tabs.Block:AddRightGroupbox("HDT (fires with AutoBlock)", "wind")
+local BlockRight = Tabs.Block:AddRightGroupbox("HDT (fires with AutoBlock)", "activity")
 BlockRight:AddToggle("HDT_Toggle", { Text = "Enable HDT", Default = false, Callback = function(v) _G.HDT_Enabled = v end })
 BlockRight:AddSlider("HDT_SpeedSlider", { Text = "Dash Speed", Default = 40, Min = 5, Max = 500, Rounding = 0, Callback = function(v) _G.HDT_Speed = v end })
 BlockRight:AddSlider("HDT_DurSlider",   { Text = "Dash Duration (s)", Default = 0.6, Min = 0.05, Max = 3, Rounding = 2, Callback = function(v) _G.HDT_Duration = v end })
@@ -1463,7 +1147,7 @@ BlockRight:AddButton("Force HDT Now", function()
     local k = hdtNearest(); if k then hdtDash(k) end
 end)
 
---═══ STAB (V2 verbatim) ═══
+--═══ STAB ═══
 local TARGET_ANIMATION_ID = "100725497418533"
 local DASHSTAB_ANIM_ID = "89448354637442"
 local stabEnabledBackstab = false
@@ -1560,7 +1244,7 @@ StabRight:AddSlider("BackstabDelay", { Text = "Backstab Start Delay", Default = 
 StabRight:AddSlider("BackstabDuration", { Text = "Backstab Duration", Default = 0.5, Min = 0.1, Max = 2, Rounding = 2, Callback = function(v) backstabDuration = v end })
 StabRight:AddSlider("DashstabDelay", { Text = "Dashstab Start Delay", Default = 0.25, Min = 0, Max = 0.5, Rounding = 2, Callback = function(v) dashstabDelay = v end })
 
---═══ SK8 (V2 verbatim) ═══
+--═══ SK8 ═══
 do
     local Sk8Player = LP
     local Sk8Workspace = Workspace
@@ -1798,8 +1482,8 @@ do
         sprayBaseCF = nil
     end)
     local Sk8Tab = Tabs["Sk8"]
-    local Sk8Left = Sk8Tab:AddLeftGroupbox("Main", "zap")
-    local Sk8Right = Sk8Tab:AddRightGroupbox("Fast Spray", "brush")
+    local Sk8Left = Sk8Tab:AddLeftGroupbox("Main", "activity")
+    local Sk8Right = Sk8Tab:AddRightGroupbox("Fast Spray", "zap")
     Sk8Left:AddToggle("AutoTrick", { Text = "Auto Trick", Default = false, Callback = function(state)
         atEnabled = state
         if state then
@@ -1823,575 +1507,201 @@ do
     Sk8Right:AddSlider("SpraySpeed", { Text = "Spray Speed", Default = 4.5, Min = 0.5, Max = 10, Rounding = 1, Callback = function(val) spraySpeed = val end })
 end
 
---═══ ACTION (V2 verbatim) ═══
-local EmotesGroup = Tabs.Action:AddLeftGroupbox("Emotes", "smile")
-local svc = { RS = ReplicatedStorage, Run = RunService, TS = game:GetService("TweenService"), Input = UserInputService }
-local lp = LP
-local emState = { emoting = false, track = nil, spd = 16, jump = 50, rotConn = nil }
-local function emStop()
-    if not emState.emoting then return end
-    emState.emoting = false
-    if emState.rotConn then emState.rotConn:Disconnect(); emState.rotConn = nil end
-    local ch = lp.Character
-    if ch then
-        local root = ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart
-        local hum  = ch:FindFirstChildOfClass("Humanoid")
-        local vfx  = ch:FindFirstChild("PlayerEmoteVFX"); if vfx then vfx:Destroy() end
-        if root then root.Anchored = false; local snd = root:FindFirstChild("EmoteSound"); if snd then snd:Destroy() end; local att = root:FindFirstChild("RootAttachment"); if att then att:Destroy() end end
-        if hum then hum.WalkSpeed = emState.spd; hum.JumpPower = emState.jump end
-    end
-    if emState.track then pcall(function() emState.track:Stop() end); emState.track = nil end
-end
-local function emPlay(mod)
-    if emState.emoting then emStop(); task.wait(0.1) end
-    local ch = lp.Character; if not ch then return end
-    local hum = ch:FindFirstChildOfClass("Humanoid")
-    local root = ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart
-    local anim = hum and hum:WaitForChild("Animator", 2)
-    if not hum or not root or not anim then return end
-    local ok, data = pcall(require, mod)
-    if not ok or not data.AssetID then return end
-    emState.emoting = true; emState.spd = hum.WalkSpeed; emState.jump = hum.JumpPower
-    hum.WalkSpeed = 0; hum.JumpPower = 0; root.Anchored = true
-    local an = Instance.new("Animation"); an.AnimationId = tostring(data.AssetID)
-    emState.track = anim:LoadAnimation(an); emState.track.Looped = true; emState.track:Play()
-    if emState.rotConn then emState.rotConn:Disconnect() end
-    emState.rotConn = svc.Run.RenderStepped:Connect(function()
-        if not emState.emoting then return end
-        local cam = Workspace.CurrentCamera; if not cam then return end
-        local ch2 = lp.Character; if not ch2 then return end
-        local r2 = ch2:FindFirstChild("HumanoidRootPart"); if not r2 then return end
-        if lp.CameraMode ~= Enum.CameraMode.LockFirstPerson then return end
-        local _, camY, _ = cam.CFrame:ToEulerAnglesYXZ()
-        r2.CFrame = CFrame.new(r2.Position) * CFrame.Angles(0, camY, 0)
-    end)
-    if data.SFX then
-        local old2 = root:FindFirstChild("EmoteSound"); if old2 then old2:Destroy() end
-        local snd = Instance.new("Sound"); snd.Name = "EmoteSound"; snd.SoundId = tostring(data.SFX); snd.Volume = 1; snd.Looped = true; snd.Parent = root; snd:Play()
-    end
-    local att = Instance.new("Attachment"); att.Name = "RootAttachment"; att.Parent = root
-    local burst = Instance.new("ParticleEmitter"); burst.Name = "EmoteBurst"; burst.Texture = "rbxassetid://635533604"; burst.Rate = 60; burst.Speed = NumberRange.new(2,5); burst.Lifetime = NumberRange.new(0.5,1.2); burst.Drag = 5; burst.Parent = att
-    if string.lower(mod.Name) == "hakaridance" or string.lower(mod.Name) == "hakari" then
-        local beamVFX = mod:FindFirstChild("HakariBeamEffect")
-        if beamVFX then
-            local v3 = beamVFX:Clone(); v3.Name = "PlayerEmoteVFX"; v3.CFrame = root.CFrame * CFrame.new(0,-1,-0.3)
-            local weld = Instance.new("WeldConstraint"); weld.Part0 = root; weld.Part1 = v3; weld.Parent = v3; v3.Parent = ch
-        end
-    end
-end
-local emoteModules = {}
-local EmFolderPath = svc.RS:FindFirstChild("Assets") and svc.RS.Assets:FindFirstChild("Emotes")
-if EmFolderPath then
-    for _, v in ipairs(EmFolderPath:GetDescendants()) do if v:IsA("ModuleScript") then table.insert(emoteModules, v) end end
-    table.sort(emoteModules, function(a,b) return a.Name<b.Name end)
-end
-local emoteNames = {}
-for _, mod in ipairs(emoteModules) do table.insert(emoteNames, mod.Name) end
-local selectedEmote = emoteNames[1] or ""
-EmotesGroup:AddDropdown("SelectedEmote", { Text = "Select Emote", Values = emoteNames, Default = selectedEmote, Callback = function(val) selectedEmote = val end })
-EmotesGroup:AddButton("Play Emote", function()
-    if selectedEmote == "" then return end
-    for _, mod in ipairs(emoteModules) do if mod.Name == selectedEmote then emPlay(mod); break end end
-end)
-EmotesGroup:AddButton("Stop Emote", function() emStop() end)
-lp.CharacterAdded:Connect(function() task.wait(0.5); if emState.emoting then emStop() end end)
-lp.CharacterRemoving:Connect(function() if emState.emoting then emStop() end end)
-local PlayerAnimGroup = Tabs.Action:AddRightGroupbox("Player Animation", "user")
-local baseAnimations = {}
-local animationEntries = {}
-local function getAnimId(animValue) return animValue and tostring(animValue) or nil end
-local function collectBaseAnimations()
-    baseAnimations = {}
-    local assets = svc.RS:FindFirstChild("Assets")
-    if not assets then return end
-    for _, roleType in ipairs({"Killers", "Survivors"}) do
-        local folder = assets:FindFirstChild(roleType)
-        if folder then
-            for _, charFolder in ipairs(folder:GetChildren()) do
-                if charFolder:IsA("Folder") then
-                    local configScript = charFolder:FindFirstChild("Config")
-                    if configScript and configScript:IsA("ModuleScript") then
-                        local ok, data = pcall(require, configScript)
-                        if ok and data and data.Animations then
-                            local anims = data.Animations
-                            baseAnimations[charFolder.Name] = { Idle = getAnimId(anims.Idle), Walk = getAnimId(anims.Walk), Run = getAnimId(anims.Run), DisplayName = data.DisplayName or charFolder.Name }
-                        end
-                    end
-                end
+--═══ PLAYER EXTRAS (kept in Player tab) ═══
+local ExtraGroup = Tabs.Player:AddRightGroupbox("Extra", "plus")
+local deleteFakeNoli = false
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if not deleteFakeNoli then continue end
+        local killers = Workspace:FindFirstChild("Players") and Workspace.Players:FindFirstChild("Killers")
+        if killers then
+            for _, model in pairs(killers:GetChildren()) do
+                if model:IsA("Model") and model:GetAttribute("IsFakeNoli") == true then model:Destroy() end
             end
         end
     end
+end)
+ExtraGroup:AddToggle("DeleteFakeNoli", { Text = "Delete Fake Noli", Default = false, Callback = function(v) deleteFakeNoli = v end })
+local dashTurnConn = nil
+local function getInputDirection()
+    local cf = Workspace.CurrentCamera.CFrame
+    local fwd = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z).Unit
+    local right = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z).Unit
+    local x, z = 0, 0
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then z = z - 1 end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then z = z + 1 end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then x = x - 1 end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then x = x + 1 end
+    local dir = fwd * -z + right * x
+    return dir.Magnitude > 0.01 and dir.Unit or fwd
 end
-local function buildUniqueList()
-    animationEntries = {}
-    local seen = {}
-    local function addEntry(name, idle, walk, run)
-        local key = idle .. "|" .. walk .. "|" .. run
-        if not seen[key] then table.insert(animationEntries, { Name = name, Idle = idle, Walk = walk, Run = run }); seen[key] = true end
-    end
-    for charName, data in pairs(baseAnimations) do addEntry(data.DisplayName or charName, data.Idle or "", data.Walk or "", data.Run or "") end
-    local assets = svc.RS:FindFirstChild("Assets")
-    if assets then
-        local skinsFolder = assets:FindFirstChild("Skins")
-        if skinsFolder then
-            for _, roleType in ipairs({"Killers", "Survivors"}) do
-                local skinRoleFolder = skinsFolder:FindFirstChild(roleType)
-                if skinRoleFolder then
-                    for _, charFolder in ipairs(skinRoleFolder:GetChildren()) do
-                        if charFolder:IsA("Folder") then
-                            local baseCharName = charFolder.Name
-                            local baseData = baseAnimations[baseCharName]
-                            for _, skinItem in ipairs(charFolder:GetChildren()) do
-                                if skinItem:IsA("Folder") then
-                                    local configScript = skinItem:FindFirstChild("Config")
-                                    if configScript and configScript:IsA("ModuleScript") then
-                                        local ok, data = pcall(require, configScript)
-                                        if ok and data and data.Animations then
-                                            local anims = data.Animations
-                                            local idle = getAnimId(anims.Idle) or (baseData and baseData.Idle)
-                                            local walk = getAnimId(anims.Walk) or (baseData and baseData.Walk)
-                                            local run = getAnimId(anims.Run) or (baseData and baseData.Run)
-                                            if idle and walk and run then
-                                                local name = data.DisplayName or skinItem.Name
-                                                addEntry(name, idle, walk, run)
-                                            end
-                                        end
-                                    end
-                                end
+local function enableDashTurn()
+    if dashTurnConn then return end
+    dashTurnConn = RunService.RenderStepped:Connect(function(dt)
+        local char = LP.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not char or not hrp or char.Name ~= "c00lkidd" then return end
+        if char:GetAttribute("FootstepsMuted") ~= true then return end
+        local dir = getInputDirection()
+        local lv = hrp:FindFirstChildWhichIsA("LinearVelocity")
+        if lv then lv.LineDirection = dir end
+        if dir.Magnitude > 0.01 then
+            local targetRot = CFrame.new(hrp.Position, hrp.Position + dir).Rotation
+            hrp.CFrame = CFrame.new(hrp.Position) * hrp.CFrame.Rotation:Lerp(targetRot, math.min(dt * 16, 1))
+        end
+    end)
+end
+local function disableDashTurn()
+    if dashTurnConn then dashTurnConn:Disconnect(); dashTurnConn = nil end
+end
+ExtraGroup:AddToggle("C00lkiddDashTurn", { Text = "c00lkidd Dash Turn", Default = false, Callback = function(v) if v then enableDashTurn() else disableDashTurn() end end })
+local breakFreeTask = nil
+local anti_breakFree = false
+local function startBreakFree()
+    if breakFreeTask then return end
+    breakFreeTask = task.spawn(function()
+        while true do
+            if not anti_breakFree then break end
+            local tui = LP.PlayerGui:FindFirstChild("TemporaryUI")
+            if tui and tui:FindFirstChild("QTE") then
+                local killers = Workspace:FindFirstChild("Players") and Workspace.Players:FindFirstChild("Killers")
+                if killers then
+                    for _, k in ipairs(killers:GetChildren()) do
+                        if k:IsA("Model") and k.Name == "Nosferatu" then
+                            local un = k:GetAttribute("Username")
+                            if un and un ~= LP.Name then
+                                pcall(function()
+                                    ReplicatedStorage.Modules.Network.Network.RemoteEvent:FireServer(un .. "NosHookQTE", {buffer.fromstring("\x01\x01")})
+                                end)
+                                break
                             end
                         end
                     end
                 end
             end
+            task.wait(0.1)
         end
-    end
-end
-collectBaseAnimations()
-buildUniqueList()
-local animEntryNames = {}
-for _, entry in ipairs(animationEntries) do table.insert(animEntryNames, entry.Name) end
-local selectedEntry = animEntryNames[1] or ""
-PlayerAnimGroup:AddDropdown("SelectedEntry", { Text = "Select Animation", Values = animEntryNames, Default = selectedEntry, Callback = function(val) selectedEntry = val end })
-local currentTracks = {}
-local moveConn = nil
-local function stopAnimations()
-    if moveConn then moveConn:Disconnect(); moveConn = nil end
-    for _, track in pairs(currentTracks) do if track then track:Stop(); track:Destroy() end end
-    currentTracks = {}
-end
-local function applyAnimation()
-    stopAnimations()
-    local entry = nil
-    for _, e in ipairs(animationEntries) do if e.Name == selectedEntry then entry = e; break end end
-    if not entry then return end
-    local char = lp.Character; if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-    local animator = hum:FindFirstChildOfClass("Animator")
-    if not animator then animator = Instance.new("Animator"); animator.Parent = hum end
-    local loaded = {}
-    local animTypes = {"Idle", "Walk", "Run"}
-    for _, animType in ipairs(animTypes) do
-        local id = entry[animType]
-        if id and id ~= "" then
-            local anim = Instance.new("Animation"); anim.AnimationId = id
-            local track = animator:LoadAnimation(anim); track.Priority = Enum.AnimationPriority.Movement; loaded[animType] = track
-        end
-    end
-    currentTracks = loaded
-    moveConn = svc.Run.RenderStepped:Connect(function()
-        if not (char and char.Parent) then stopAnimations(); return end
-        local spd = hum.WalkSpeed; local dir = hum.MoveDirection.Magnitude
-        local newTrack = nil
-        if dir > 0.1 then
-            if spd >= 20 then newTrack = loaded.Run or loaded.Walk else newTrack = loaded.Walk or loaded.Run end
-        else newTrack = loaded.Idle end
-        for _, track in pairs(loaded) do if track.IsPlaying and track ~= newTrack then track:Stop() end end
-        if newTrack and not newTrack.IsPlaying then newTrack:Play() end
     end)
 end
-PlayerAnimGroup:AddButton("Apply Animation", applyAnimation)
-PlayerAnimGroup:AddButton("Stop Animation", function() stopAnimations() end)
-PlayerAnimGroup:AddButton("Refresh List", function() collectBaseAnimations(); buildUniqueList() end)
-lp.CharacterAdded:Connect(function() task.wait(0.5); if next(currentTracks) then stopAnimations() end end)
-
---═══ MUSIC (V2 verbatim) ═══
-do
-    local tabMusic = Tabs["Music"]
-    local leftGroup = tabMusic:AddLeftGroupbox("LMS Music", "music")
-    local rightGroup = tabMusic:AddRightGroupbox("Preview", "headphones")
-    local musicTracks = {
-        ["MADE JUST 4 U"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/IMG_7277.mp3",
-        ["Hello"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/IMG_7280.mp3",
-        ["APOCOOLYPSE"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/IMG_7282.mp3",
-        ["A BRAVE SOUL"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/IMG_7283.mp3",
-        ["Profitable Passion"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/IMG_7287.mp3",
-        ["ARTIST BLOCK:Reprise"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/IMG_7290.mp3",
-        ["Faith's Answer"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/IMG_7292.mp3",
-        ["Teapot Palace"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/IMG_7295.mp3",
-        ["Ready To Die"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/IMG_7309.mp3",
-        ["Escape The Necrobloxians"] = "https://raw.githubusercontent.com/FixFox550/FixFox/refs/heads/main/Hwoowowow.mp3",
-    }
-    local musicList = {}
-    for k in pairs(musicTracks) do table.insert(musicList, k) end
-    table.sort(musicList)
-    local musicDir = "CupcakeHubMusic"
-    if not isfolder(musicDir) then makefolder(musicDir) end
-    local music = {
-        on = false,
-        selected = musicList[1] or "",
-        cached = {},
-        origId = nil,
-        thread = nil,
-        lastSoundCheck = 0,
-        cachedSound = nil,
-        previewSound = nil,
-    }
-    local function musicTrackPath(name)
-        return musicDir .. "/" .. name .. ".mp3"
-    end
-    local function musicHttpGet(url)
-        local ok, data = pcall(function() return game:HttpGet(url) end)
-        return ok and data or nil
-    end
-    local function musicFetch(name)
-        if music.cached[name] then return music.cached[name] end
-        local url = musicTracks[name]
-        if not url then return nil end
-        local path = musicTrackPath(name)
-        if not isfile(path) then
-            local data = musicHttpGet(url)
-            if not data then return nil end
-            writefile(path, data)
-        end
-        local ok, asset = pcall(function() return getcustomasset(path) end)
-        if ok and asset then
-            music.cached[name] = asset
-            return asset
-        end
-        return nil
-    end
-    local musicFetchInFlight = {}
-    local function musicFetchAsync(name, cb)
-        if music.cached[name] then
-            if cb then cb(music.cached[name]) end
-            return
-        end
-        if musicFetchInFlight[name] then return end
-        musicFetchInFlight[name] = true
-        task.spawn(function()
-            local asset = musicFetch(name)
-            musicFetchInFlight[name] = nil
-            if asset and cb then cb(asset) end
-        end)
-    end
-    local function musicGetSound()
-        local now = tick()
-        if music.cachedSound and music.cachedSound.Parent and (now - music.lastSoundCheck) < 0.5 then
-            return music.cachedSound
-        end
-        music.lastSoundCheck = now
-        local snd = Workspace:FindFirstChild("Themes") and Workspace.Themes:FindFirstChild("LastSurvivor")
-            or Workspace:FindFirstChild("LastSurvivor", true)
-            or game:GetService("SoundService"):FindFirstChild("LastSurvivor", true)
-        if snd and snd:IsA("Sound") then
-            music.cachedSound = snd
-            return snd
-        end
-        music.cachedSound = nil
-        return nil
-    end
-    local function applyMusic(name)
-        pcall(function()
-            local snd = musicGetSound()
-            if not snd then return end
-            if not music.origId then music.origId = snd.SoundId end
-            local asset = musicFetch(name)
-            if not asset then return end
-            if snd.SoundId ~= asset then
-                snd.SoundId = asset
-                snd:Stop()
-                task.wait(0.05)
-                snd:Play()
-            elseif not snd.IsPlaying then
-                snd:Play()
-            end
-        end)
-    end
-    local function musicReset()
-        pcall(function()
-            local snd = musicGetSound()
-            if snd and music.origId then
-                snd.SoundId = music.origId
-                snd:Stop()
-                task.wait(0.05)
-                snd:Play()
-            end
-        end)
-    end
-    local function musicMonitor()
-        while music.on do
-            pcall(function()
-                local snd = musicGetSound()
-                if snd then
-                    local asset = music.cached[music.selected]
-                    if asset then
-                        if snd.SoundId ~= asset then
-                            if not music.origId then music.origId = snd.SoundId end
-                            snd.SoundId = asset
-                            snd:Stop()
-                            task.wait(0.05)
-                            snd:Play()
-                        elseif not snd.IsPlaying then
-                            snd:Play()
-                        end
-                    else
-                        musicFetchAsync(music.selected, function(a)
-                            applyMusic(music.selected)
-                        end)
+local function stopBreakFree()
+    if breakFreeTask then task.cancel(breakFreeTask); breakFreeTask = nil end
+end
+ExtraGroup:AddToggle("AutoBreakFree", { Text = "Auto Break Free", Default = false, Callback = function(v)
+    anti_breakFree = v
+    if v then startBreakFree() else stopBreakFree() end
+end })
+local pullRopeTask = nil
+local anti_pullRope = false
+local function startPullRope()
+    if pullRopeTask then return end
+    pullRopeTask = task.spawn(function()
+        while true do
+            if not anti_pullRope then break end
+            local killers = Workspace:FindFirstChild("Players") and Workspace.Players:FindFirstChild("Killers")
+            local isNos = false
+            if killers then
+                for _, k in ipairs(killers:GetChildren()) do
+                    if k:IsA("Model") and k.Name == "Nosferatu" then
+                        local un = k:GetAttribute("Username")
+                        if un == LP.Name then isNos = true break end
                     end
                 end
-            end)
-            task.wait(1)
+            end
+            if isNos then
+                local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
+                if hum then
+                    for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                        local animId = track.Animation and track.Animation.AnimationId
+                        if animId then
+                            local id = animId:match("%d+")
+                            if id == "113403615979705" then
+                                pcall(function()
+                                    ReplicatedStorage.Modules.Network.Network.RemoteEvent:FireServer(LP.Name .. "NosHookQTE", {buffer.fromstring("\x01\x01")})
+                                end)
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait(0.1)
         end
-    end
-    local function previewStart(name)
-        pcall(function()
-            local asset = musicFetch(name)
-            if not asset then
-                Library:Notify({Title = "Preview", Description = "Failed to load song", Time = 3})
-                return
-            end
-            if music.previewSound then
-                music.previewSound:Stop()
-                music.previewSound:Destroy()
-            end
-            local sound = Instance.new("Sound")
-            sound.Name = "CupcakePreview"
-            sound.SoundId = asset
-            sound.Volume = 1
-            sound.Parent = game:GetService("SoundService")
-            sound:Play()
-            music.previewSound = sound
-            Library:Notify({Title = "Preview", Description = "Playing: " .. name, Time = 2})
-        end)
-    end
-    local function previewStop()
-        if music.previewSound then
-            music.previewSound:Stop()
-            music.previewSound:Destroy()
-            music.previewSound = nil
-            Library:Notify({Title = "Preview", Description = "Preview stopped", Time = 2})
-        end
-    end
-    leftGroup:AddToggle("ApplyLMS", { Text = "Apply LMS", Default = false, Callback = function(on)
-        pcall(function()
-            music.on = on
-            if on then
-                musicFetchAsync(music.selected)
-                music.thread = task.spawn(musicMonitor)
-            else
-                if music.thread then task.cancel(music.thread); music.thread = nil end
-                musicReset()
-            end
-        end)
-    end })
-    leftGroup:AddDropdown("TrackSelect", { Text = "Track", Values = musicList, Default = music.selected, Callback = function(sel)
-        pcall(function()
-            music.selected = type(sel) == "table" and sel[1] or sel
-            task.spawn(function() musicFetchAsync(music.selected) end)
-        end)
-    end })
-    leftGroup:AddButton("Preload LMS", function()
-        pcall(function()
-            for name in pairs(musicTracks) do
-                musicFetchAsync(name)
-                task.wait(0.05)
-            end
-            Library:Notify({Title = "Music", Description = "Preload complete", Time = 2})
-        end)
-    end)
-    rightGroup:AddButton("Preview", function() pcall(function() previewStart(music.selected) end) end)
-    rightGroup:AddButton("Stop Preview", function() pcall(function() previewStop() end) end)
-end
-
---═══ MISC (V2 verbatim) ═══
-local ImpersonateGroup = Tabs.Misc:AddLeftGroupbox("Impersonate", "user")
-local FlipGroupMisc = Tabs.Misc:AddLeftGroupbox("Front Flip", "flip")
-local ChatGroupMisc = Tabs.Misc:AddLeftGroupbox("Chat", "message")
-local AntiHiddenGroup = Tabs.Misc:AddRightGroupbox("Anti Hidden Stats", "eye-off")
-local KillerWallGroup = Tabs.Misc:AddRightGroupbox("Killer Walls", "door")
-local TimerPosGroup = Tabs.Misc:AddRightGroupbox("Timer Position", "clock")
-local CameraGroupMisc = Tabs.Misc:AddRightGroupbox("Camera", "camera")
-local LightingGroupMisc = Tabs.Misc:AddRightGroupbox("Lighting", "sun")
-local victimName = "Roblox"
-ImpersonateGroup:AddInput("VictimInput", { Default = victimName, Numeric = false, Finished = false, ClearTextOnFocus = true, Text = "Player Username", Tooltip = "Enter the name of the victim to impersonate", Placeholder = "Enter victim name...", Callback = function(Value) victimName = Value end })
-ImpersonateGroup:AddButton({ Text = "Impersonate Player", Func = function()
-    if victimName == "" then Library:Notify({Title = "Error", Description = "Please enter a victim name", Time = 3}); return end
-    pcall(function()
-        local HttpService = game:GetService("HttpService")
-        local localPlayer = LP
-        local function getUserIdByUsername(username)
-            local success, result = pcall(function() return game:HttpGet("https://users.roblox.com/v1/users/search?keyword=" .. username, true) end)
-            if success then local data = HttpService:JSONDecode(result) if data and data.data and #data.data > 0 then return data.data[1].id, data.data[1].name, data.data[1].displayName end end
-            return nil, nil, nil
-        end
-        local userId, userName, displayName = getUserIdByUsername(victimName)
-        if not userId then Library:Notify({Title = "Error", Description = "Player not found", Time = 3}); return end
-        local function applyCharacterAppearance(character, userId)
-            local appearance = Players:GetCharacterAppearanceAsync(userId)
-            for i,v in pairs(character:GetChildren()) do if v:IsA("Accessory") or v:IsA("Shirt") or v:IsA("Pants") or v:IsA("BodyColors") then v:Destroy() end end
-            for i,v in pairs(appearance:GetChildren()) do if v:IsA("Shirt") or v:IsA("Pants") or v:IsA("BodyColors") then v.Parent = character elseif v:IsA("Accessory") then character.Humanoid:AddAccessory(v) end end
-            if appearance:FindFirstChild("face") then
-                if character:WaitForChild("Head"):FindFirstChild("face") then character.Head.face:Destroy() end
-                appearance.face.Parent = character.Head
-            else
-                if character:WaitForChild("Head"):FindFirstChild("face") then character.Head.face:Destroy() end
-                local face = Instance.new("Decal"); face.Face = "Front"; face.Name = "face"; face.Texture = "rbxasset://textures/face.png"; face.Transparency = 0; face.Parent = character.Head
-            end
-            local parent = character.Parent; character.Parent = nil; character.Parent = parent
-        end
-        local function updatePlayerListName(newName)
-            if localPlayer and localPlayer.PlayerGui and localPlayer.PlayerGui.MainUI and localPlayer.PlayerGui.MainUI.PlayerListHolder and localPlayer.PlayerGui.MainUI.PlayerListHolder.Contents and localPlayer.PlayerGui.MainUI.PlayerListHolder.Contents.Players then
-                local myEntry = localPlayer.PlayerGui.MainUI.PlayerListHolder.Contents.Players[localPlayer.Name]
-                if myEntry and myEntry.PlayerInfo and myEntry.PlayerInfo.Username then myEntry.PlayerInfo.Username.Text = newName end
-            end
-        end
-        if not localPlayer.Character then localPlayer.CharacterAdded:Wait() end
-        repeat task.wait() until localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-        localPlayer.Name = userName; localPlayer.UserId = userId; localPlayer.CharacterAppearanceId = userId; localPlayer.DisplayName = displayName
-        localPlayer.Character.Name = userName
-        if localPlayer.Character:FindFirstChild("Humanoid") then localPlayer.Character.Humanoid.DisplayName = displayName end
-        applyCharacterAppearance(localPlayer.Character, userId)
-        updatePlayerListName(displayName)
-        localPlayer.CharacterAdded:Connect(function(character)
-            task.wait(0.5)
-            if character and character:FindFirstChild("Humanoid") then
-                character.Name = userName
-                if character:FindFirstChild("Humanoid") then character.Humanoid.DisplayName = displayName end
-                applyCharacterAppearance(character, userId)
-            end
-        end)
-        Library:Notify({Title = "Success", Description = string.format("Changed name to: %s\nand applied %s's outfit", displayName, victimName), Time = 3})
-    end)
-end, DoubleClick = false, Tooltip = "Click to apply victim's name and outfit to your character" })
-local ffEnabled = false
-local jumpHeight = 72
-local jumpDistance = 35
-local ffConn, ffBtnFrame = nil, nil
-local function flip()
-    if ffEnabled then return end; ffEnabled = true
-    local char = LP.Character; if not char then ffEnabled = false return end
-    local hrp = char:FindFirstChild("HumanoidRootPart"); local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then ffEnabled = false return end
-    local saved = {}; local animator = hum:FindFirstChildOfClass("Animator")
-    if animator then for _, track in ipairs(animator:GetPlayingAnimationTracks()) do saved[#saved + 1] = { track = track, time = track.TimePosition }; track:Stop(0) end end
-    hum:ChangeState(Enum.HumanoidStateType.Physics)
-    for _, state in ipairs({Enum.HumanoidStateType.FallingDown, Enum.HumanoidStateType.Freefall, Enum.HumanoidStateType.Running, Enum.HumanoidStateType.Seated, Enum.HumanoidStateType.Climbing}) do hum:SetStateEnabled(state, false) end
-    local dur = 0.45; local steps = 120; local startCF = hrp.CFrame; local fwd = startCF.LookVector; local up = Vector3.new(0, 1, 0)
-    task.spawn(function()
-        local st = tick()
-        for i = 1, steps do
-            local t = i / steps; local h = jumpHeight * (t - t * t); local pos = startCF.Position + fwd * (jumpDistance * t) + up * h; local rot = startCF.Rotation * CFrame.Angles(-math.rad(i * (360 / steps)), 0, 0)
-            hrp.CFrame = CFrame.new(pos) * rot
-            local elapsed = tick() - st; local waitTime = (dur / steps) * i - elapsed; if waitTime > 0 then task.wait(waitTime) end
-        end
-        hrp.CFrame = CFrame.new(startCF.Position + fwd * jumpDistance) * startCF.Rotation
-        for _, state in ipairs({Enum.HumanoidStateType.FallingDown, Enum.HumanoidStateType.Freefall, Enum.HumanoidStateType.Running, Enum.HumanoidStateType.Seated, Enum.HumanoidStateType.Climbing}) do hum:SetStateEnabled(state, true) end
-        hum:ChangeState(Enum.HumanoidStateType.Running)
-        if animator then for _, d in ipairs(saved) do d.track:Play(); d.track.TimePosition = d.time end end
-        task.wait(0.25); ffEnabled = false
     end)
 end
-local function toggleFlipButton(v)
-    if v then
-        pcall(function()
-            local sh = game.CoreGui.TopBarApp.TopBarApp.UnibarLeftFrame.UnibarMenu["2"]
-            if not sh then return end
-            local osize = sh.Size.X.Offset
-            ffBtnFrame = Instance.new("Frame", sh); ffBtnFrame.Size = UDim2.new(0, 48, 0, 44); ffBtnFrame.BackgroundTransparency = 1; ffBtnFrame.Position = UDim2.new(0, sh.Size.X.Offset - 48, 0, 0)
-            local ib = Instance.new("ImageButton", ffBtnFrame); ib.BackgroundTransparency = 1; ib.Size = UDim2.new(0, 36, 0, 36); ib.AnchorPoint = Vector2.new(0.5, 0.5); ib.Position = UDim2.new(0.5, 0, 0.5, 0); ib.Image = "rbxthumb://type=Asset&id=2714338264&w=150&h=150"
-            ffConn = ib.Activated:Connect(flip)
-            sh.Size = UDim2.new(0, osize + 48, 0, sh.Size.Y.Offset); ffBtnFrame.Position = UDim2.new(0, sh.Size.X.Offset - 48, 0, 0)
-        end)
-    else if ffConn then ffConn:Disconnect(); ffConn = nil end; if ffBtnFrame then ffBtnFrame:Destroy(); ffBtnFrame = nil end end
+local function stopPullRope()
+    if pullRopeTask then task.cancel(pullRopeTask); pullRopeTask = nil end
 end
-FlipGroupMisc:AddToggle("FlipButtonToggle", { Text = "Show Flip Button", Default = false, Callback = function(v) toggleFlipButton(v) end })
-FlipGroupMisc:AddSlider("JumpHeight", { Text = "Jump Height", Default = 72, Min = 20, Max = 200, Rounding = 0, Callback = function(v) jumpHeight = v end })
-FlipGroupMisc:AddSlider("JumpDistance", { Text = "Jump Distance", Default = 35, Min = 10, Max = 100, Rounding = 0, Callback = function(v) jumpDistance = v end })
-ChatGroupMisc:AddToggle("AlwaysShowChat", { Text = "Show Chat", Default = false, Callback = function(state)
-    if state then
-        _G.showChat = true
-        task.spawn(function() while _G.showChat and task.wait() do local chatConfig = game:GetService("TextChatService"):FindFirstChildOfClass("ChatWindowConfiguration") if chatConfig then chatConfig.Enabled = true end end end)
-    else
-        _G.showChat = false
-        local playingState = LP:GetAttribute("PlayingState") or "Playing"
-        if playingState ~= "Spectating" then local chatConfig = game:GetService("TextChatService"):FindFirstChildOfClass("ChatWindowConfiguration") if chatConfig then chatConfig.Enabled = false end end
-    end
+ExtraGroup:AddToggle("AutoPullRope", { Text = "Auto Pull Rope", Default = false, Callback = function(v)
+    anti_pullRope = v
+    if v then startPullRope() else stopPullRope() end
 end })
-local hiddenStatsEnabled = false
-local originalValues = {}
-local paths = {"HideKillerWins", "HidePlaytime", "HideSurvivorWins"}
-local function saveOriginals(p)
-    originalValues[p.UserId] = originalValues[p.UserId] or {}
-    for _, k in ipairs(paths) do local v = p.PlayerData.Settings.Privacy:FindFirstChild(k) if v then originalValues[p.UserId][k] = v.Value end end
-end
-local function reveal(p) for _, k in ipairs(paths) do local v = p.PlayerData.Settings.Privacy:FindFirstChild(k) if v then v.Value = false end end end
-local function restore(p)
-    if not originalValues[p.UserId] then return end
-    for k, val in pairs(originalValues[p.UserId]) do local v = p.PlayerData.Settings.Privacy:FindFirstChild(k) if v then v.Value = val end end
-end
-local function toggleHiddenStats(on)
-    for _, p in ipairs(Players:GetPlayers()) do if on then saveOriginals(p); reveal(p) else restore(p) end end
-end
-Players.PlayerAdded:Connect(function(p) if hiddenStatsEnabled then saveOriginals(p); reveal(p) end end)
-AntiHiddenGroup:AddToggle("AntiHiddenStatsToggle", { Text = "Anti Hidden Stats", Default = false, Callback = function(v) hiddenStatsEnabled = v; toggleHiddenStats(v) end })
-local function setKillerWalls(collide)
-    for _, v in ipairs(Workspace:GetDescendants()) do if v.Name == "KillerDoors" then for _, wall in ipairs(v:GetChildren()) do if wall:IsA("BasePart") then wall.CanCollide = collide end end end end
-end
-KillerWallGroup:AddToggle("KillerWallsToggle", { Text = "Disable Killer Walls", Default = false, Callback = function(v) setKillerWalls(not v) end })
-local timerX = 0.5
-local function applyTimerPos()
-    local rt = LP.PlayerGui:FindFirstChild("RoundTimer"); local m = rt and rt:FindFirstChild("Main")
-    if m then m.Position = UDim2.new(timerX, 0, m.Position.Y.Scale, m.Position.Y.Offset) end
-end
-applyTimerPos()
-TimerPosGroup:AddSlider("TimerX", { Text = "Timer X Position", Default = 0.5, Min = 0, Max = 1, Rounding = 2, Callback = function(v) timerX = v; applyTimerPos() end })
-LP.CharacterAdded:Connect(function() task.delay(1, applyTimerPos) end)
-CameraGroupMisc:AddToggle("FreeZoom", { Text = "Free Zoom", Default = false, Callback = function(v) LP.CameraMaxZoomDistance = v and math.huge or 12 end })
-CameraGroupMisc:AddToggle("CameraNoclip", { Text = "Camera Noclip", Default = false, Callback = function(v) LP.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode[v and "Invisicam" or "Zoom"] end })
-local fovValueMisc = 70
-CameraGroupMisc:AddSlider("FOVSlider", { Text = "Field of View", Default = 70, Min = 70, Max = 120, Rounding = 0, Callback = function(v) fovValueMisc = v; if _G.FOV then Workspace.CurrentCamera.FieldOfView = v end end })
-CameraGroupMisc:AddToggle("FOVToggle", { Text = "Enable FOV", Default = false, Callback = function(v) _G.FOV = v; if v then Workspace.CurrentCamera.FieldOfView = fovValueMisc else Workspace.CurrentCamera.FieldOfView = 70 end end })
-task.spawn(function() while true do if _G.FOV then Workspace.CurrentCamera.FieldOfView = fovValueMisc end task.wait() end end)
-LightingGroupMisc:AddSlider("Brightness", { Text = "Brightness", Default = 0, Min = 0, Max = 3, Rounding = 1, Callback = function(v) _G.Brightness = v; if _G.Fullbright then Lighting.Brightness = v end end })
-LightingGroupMisc:AddToggle("NoShadows", { Text = "No Shadows", Default = false, Callback = function(v) _G.GlobalShadows = v; if _G.Fullbright then Lighting.GlobalShadows = not v end end })
-LightingGroupMisc:AddToggle("NoFog", { Text = "No Fog", Default = false, Callback = function(v) _G.NoFog = v end })
-LightingGroupMisc:AddToggle("EnableLighting", { Text = "Enable Lighting", Default = false, Callback = function(v)
-    _G.Fullbright = v
-    if not v then
-        Lighting.OutdoorAmbient = Color3.fromRGB(55, 55, 55); Lighting.Brightness = 0; Lighting.GlobalShadows = true
-        local fog = Lighting:FindFirstChildOfClass("Atmosphere"); if fog and fog:GetAttribute("Density") then fog.Density = fog:GetAttribute("Density") end
-        Lighting.FogStart = Lighting:GetAttribute("FogStart") or 0; Lighting.FogEnd = Lighting:GetAttribute("FogEnd") or 10000
+local azureQTEEnabled = false
+local originalGetHitZoneIndex = nil
+local hookSlot = nil
+local function enableQTE()
+    if azureQTEEnabled then return end
+    azureQTEEnabled = true
+    local BehaviorModule = ReplicatedStorage:FindFirstChild("Assets")
+        and ReplicatedStorage.Assets:FindFirstChild("Killers")
+        and ReplicatedStorage.Assets.Killers:FindFirstChild("Azure")
+        and ReplicatedStorage.Assets.Killers.Azure:FindFirstChild("Config")
+        and ReplicatedStorage.Assets.Killers.Azure.Config:FindFirstChild("cl_WorkaroundModules")
+        and ReplicatedStorage.Assets.Killers.Azure.Config.cl_WorkaroundModules:FindFirstChild("cl_ConstructQTE")
+    if not BehaviorModule then
+        Library:Notify({ Title = "QTE Error", Description = "QTE module not found", Time = 3 })
+        return
     end
-end })
-task.spawn(function()
-    while true do
-        if _G.Fullbright then
-            if not Lighting:GetAttribute("FogStart") then Lighting:SetAttribute("FogStart", Lighting.FogStart) end
-            if not Lighting:GetAttribute("FogEnd") then Lighting:SetAttribute("FogEnd", Lighting.FogEnd) end
-            local fog = Lighting:FindFirstChildOfClass("Atmosphere"); if fog and not fog:GetAttribute("Density") then fog:SetAttribute("Density", fog.Density) end
-            Lighting.FogStart = _G.NoFog and 0 or Lighting:GetAttribute("FogStart"); Lighting.FogEnd = _G.NoFog and math.huge or Lighting:GetAttribute("FogEnd")
-            if fog then fog.Density = _G.NoFog and 0 or fog:GetAttribute("Density") end
-            Lighting.OutdoorAmbient = Color3.new(1, 1, 1); Lighting.Brightness = _G.Brightness or 0; Lighting.GlobalShadows = not (_G.GlobalShadows or false)
+    local Behavior
+    pcall(function() Behavior = require(BehaviorModule) end)
+    if not Behavior or not Behavior.new then return end
+    local function cheatGetHitZoneIndex(currentValue, qteBounds, completedZones)
+        if type(completedZones) == "table" then
+            for i = 1, 3 do
+                if not completedZones[i] then return i end
+            end
         end
-        task.wait()
+        return 1
     end
-end)
+    local upvalues = debug.getupvalues(Behavior.new)
+    for slot, value in pairs(upvalues) do
+        if type(value) == "function" and debug.info(value, "a") == 3 then
+            originalGetHitZoneIndex = value
+            hookSlot = slot
+            debug.setupvalue(Behavior.new, slot, cheatGetHitZoneIndex)
+            Library:Notify({ Title = "QTE", Description = "Auto QTE hooked", Time = 2 })
+            return
+        end
+    end
+end
+local function disableQTE()
+    azureQTEEnabled = false
+    if hookSlot and originalGetHitZoneIndex then
+        local BehaviorModule = ReplicatedStorage:FindFirstChild("Assets")
+            and ReplicatedStorage.Assets:FindFirstChild("Killers")
+            and ReplicatedStorage.Assets.Killers:FindFirstChild("Azure")
+            and ReplicatedStorage.Assets.Killers.Azure:FindFirstChild("Config")
+            and ReplicatedStorage.Assets.Killers.Azure.Config:FindFirstChild("cl_WorkaroundModules")
+            and ReplicatedStorage.Assets.Killers.Azure.Config.cl_WorkaroundModules:FindFirstChild("cl_ConstructQTE")
+        if BehaviorModule then
+            local Behavior
+            pcall(function() Behavior = require(BehaviorModule) end)
+            if Behavior and Behavior.new then
+                debug.setupvalue(Behavior.new, hookSlot, originalGetHitZoneIndex)
+            end
+        end
+        hookSlot = nil
+        originalGetHitZoneIndex = nil
+    end
+end
+ExtraGroup:AddToggle("AzureAutoQTE", { Text = "Auto Azure QTE", Default = false, Callback = function(val)
+    if val then enableQTE() else disableQTE() end
+end })
 
---═══ UI SETTINGS (V2 verbatim) ═══
-local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu", "wrench")
+--═══ UI SETTINGS ═══
+local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu", "sliders")
 MenuGroup:AddToggle("KeybindMenuOpen", { Default = Library.KeybindFrame.Visible, Text = "Open Keybind Menu", Callback = function(value) Library.KeybindFrame.Visible = value end })
-MenuGroup:AddToggle("ShowCustomCursor", { Text = "Custom Cursor", Default = true, Callback = function(Value) Library.ShowCustomCursor = Value end })
+MenuGroup:AddToggle("ShowCustomCursor", { Text = "Custom Cursor", Default = false, Callback = function(Value) Library.ShowCustomCursor = Value end })
 MenuGroup:AddDropdown("NotificationSide", { Values = { "Left", "Right" }, Default = "Right", Text = "Notification Side", Callback = function(Value) Library:SetNotifySide(Value) end })
 MenuGroup:AddDropdown("DPIDropdown", { Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" }, Default = "100%", Text = "DPI Scale", Callback = function(Value) Value = Value:gsub("%%", ""); local DPI = tonumber(Value); Library:SetDPIScale(DPI) end })
 MenuGroup:AddDivider()
@@ -2399,14 +1709,14 @@ MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightSh
 MenuGroup:AddButton("Unload", function() Library:Unload() end)
 Library.ToggleKeybind = Options.MenuKeybind
 ThemeManager:SetLibrary(Library)
-ThemeManager:SetDefaultTheme({ BackgroundColor = Color3.fromRGB(26, 26, 46), AccentColor = Color3.fromRGB(137, 180, 250), OutlineColor = Color3.fromRGB(49, 50, 68), FontColor = Color3.fromRGB(205, 214, 244), FontFace = Enum.Font.Jura })
+ThemeManager:SetFolder("CupcakeHub")
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-ThemeManager:SetFolder("CupcakeHub")
-SaveManager:SetFolder("CupcakeHub/Forsaken")
+SaveManager:SetFolder("CupcakeHub")
 SaveManager:SetSubFolder("Forsaken")
-SaveManager:BuildConfigSection(Tabs["UI Settings"])
+ThemeManager:BuildConfigSection(Tabs["UI Settings"])
 ThemeManager:ApplyToTab(Tabs["UI Settings"])
+SaveManager:BuildConfigSection(Tabs["UI Settings"])
 SaveManager:LoadAutoloadConfig()
 Library:OnUnload(function() print("Cupcake Hub unloaded!") end)
