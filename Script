@@ -1,6 +1,3 @@
---═══════════════════════════════════════════════════════════════════
--- Vortex Hub
---═══════════════════════════════════════════════════════════════════
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
 repeat task.wait() until LP
